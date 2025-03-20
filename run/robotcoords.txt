@@ -1,0 +1,5 @@
+#Robot Navigation Coordinates
+#Wed Mar 19 21:15:22 YEKT 2025
+Z=-238
+Y=4
+X=-835

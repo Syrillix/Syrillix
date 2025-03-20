@@ -1,0 +1,16 @@
+[
+{
+  "modid": "atollscript",
+  "name": "Atoll script",
+  "description": "Best script for Hypixel Skyblock.",
+  "version": "${version}",
+  "mcversion": "${mcversion}",
+  "url": "",
+  "updateUrl": "",
+  "authorList": ["stur1ks", "sanyek"],
+  "credits": "Discord: stur1ks",
+  "logoFile": "",
+  "screenshots": [],
+  "dependencies": []
+}
+]
