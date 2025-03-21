@@ -1,10 +1,10 @@
 package atoll.modules.features;
 
-import atoll.Main;
 import atoll.modules.features.combat.ZombieKiller;
 import atoll.modules.features.test.*;
 import atoll.modules.features.fishing.*;
 import atoll.gui.Category.CategoryType;
+import net.minecraftforge.common.MinecraftForge;
 
 import java.util.*;
 import java.util.stream.Collectors;
