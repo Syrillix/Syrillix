@@ -91,10 +91,6 @@ public class Main {
         }
     }
 
-    public void registerModule(Module module) {
-        // Регистрация модуля в MinecraftForge
-        MinecraftForge.EVENT_BUS.register(module);
-    }
 
     public ClickGui getClickGui() {
         return clickGui;
