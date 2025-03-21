@@ -173,7 +173,7 @@ public class ClickGui extends GuiScreen {
 
                 // Отрисовываем только видимые модули
                 List<Module> visibleModules = new ArrayList<>();
-                for (Main.Module module : selectedCategory.getModules()) {
+                for (Module module : selectedCategory.getModules()) {
                     visibleModules.add(module);
                 }
 
