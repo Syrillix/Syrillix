@@ -1,9 +1,8 @@
 package atoll.modules.features.combat;
 
-import atoll.Main;
 import atoll.gui.Category;
 import atoll.gui.setting.Setting;
-import atoll.modules.features.Module;
+import atoll.modules.Module;
 import atoll.util.robotUtil.RobotUtil;
 import net.minecraft.client.Minecraft;
 import net.minecraft.entity.Entity;

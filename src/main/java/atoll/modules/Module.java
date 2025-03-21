@@ -1,4 +1,4 @@
-package atoll.modules.features;
+package atoll.modules;
 
 import atoll.gui.Category;
 import atoll.gui.setting.Setting;

@@ -1,8 +1,7 @@
 package atoll.gui;
 
-import atoll.Main;
 import atoll.gui.setting.Setting;
-import atoll.modules.features.Module;
+import atoll.modules.Module;
 import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.client.gui.ScaledResolution;
 import net.minecraft.client.renderer.GlStateManager;

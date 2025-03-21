@@ -1,4 +1,4 @@
-package atoll.modules.features;
+package atoll.modules;
 
 import atoll.modules.features.combat.ZombieKiller;
 import atoll.modules.features.test.*;

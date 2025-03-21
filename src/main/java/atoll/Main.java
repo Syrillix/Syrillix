@@ -1,9 +1,8 @@
 package atoll;
 
-import atoll.modules.features.ModuleManager;
+import atoll.modules.ModuleManager;
 import atoll.gui.ClickGui;
 import atoll.gui.Category;
-import atoll.gui.setting.Setting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiScreen;
 import net.minecraftforge.common.MinecraftForge;
@@ -16,9 +15,6 @@ import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.InputEvent.KeyInputEvent;
 import net.minecraftforge.fml.common.gameevent.TickEvent;
 import org.lwjgl.input.Keyboard;
-
-import java.util.ArrayList;
-import java.util.List;
 
 @Mod(modid = Main.MODID, name = Main.NAME, version = Main.VERSION, clientSideOnly = true)
 public class Main {

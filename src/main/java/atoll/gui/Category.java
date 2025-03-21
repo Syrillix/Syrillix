@@ -1,9 +1,8 @@
 package atoll.gui;
 
-import atoll.modules.features.Module;
+import atoll.modules.Module;
 
 import java.util.*;
-import java.util.stream.Collectors;
 
 public class Category {
     private static final Map<CategoryType, Category> categories = new EnumMap<>(CategoryType.class);
