@@ -2,6 +2,7 @@ package atoll.gui;
 
 import atoll.Main;
 import atoll.gui.setting.Setting;
+import atoll.modules.features.Module;
 import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.client.gui.ScaledResolution;
 import net.minecraft.client.renderer.GlStateManager;
@@ -21,7 +22,7 @@ import java.util.Map;
 public class ClickGui extends GuiScreen {
     private List<Category> categories = new ArrayList<>();
     private Category selectedCategory = null;
-    private Map<Main.Module, Boolean> moduleSettingsExpanded = new HashMap<>();
+    private Map<Module, Boolean> moduleSettingsExpanded = new HashMap<>();
     private int scrollOffset = 0;
 
     // Dimensions and positions
@@ -53,7 +54,7 @@ public class ClickGui extends GuiScreen {
     public ClickGui() {
         // Initialize moduleSettingsExpanded map
         for (Category category : Category.getCategories()) {
-            for (Main.Module module : category.getModules()) {
+            for (Module module : category.getModules()) {
                 moduleSettingsExpanded.put(module, false);
             }
         }
@@ -171,12 +172,12 @@ public class ClickGui extends GuiScreen {
                         scissorHeight * scaleFactor);
 
                 // Отрисовываем только видимые модули
-                List<Main.Module> visibleModules = new ArrayList<>();
+                List<Module> visibleModules = new ArrayList<>();
                 for (Main.Module module : selectedCategory.getModules()) {
                     visibleModules.add(module);
                 }
 
-                for (Main.Module module : visibleModules) {
+                for (Module module : visibleModules) {
                     // Проверяем, находится ли модуль в видимой области
                     if (moduleY + 25 >= scissorY && moduleY <= scissorY + scissorHeight) {
                         boolean isHovered = isMouseOver(mouseX, mouseY, modulesX + 10, moduleY, modulesWidth - 20, 25);
@@ -299,7 +300,7 @@ public class ClickGui extends GuiScreen {
             int visibleAreaTop = guiY + 50;
             int visibleAreaBottom = guiY + guiHeight - 5;
 
-            for (Main.Module module : selectedCategory.getModules()) {
+            for (Module module : selectedCategory.getModules()) {
                 boolean isExpanded = moduleSettingsExpanded.getOrDefault(module, false);
 
                 // Check if module is in visible area
@@ -376,7 +377,7 @@ public class ClickGui extends GuiScreen {
             int modulesWidth = guiWidth - categoryWidth;
             int moduleY = guiY + 50 + scrollOffset;
 
-            for (Main.Module module : selectedCategory.getModules()) {
+            for (Module module : selectedCategory.getModules()) {
                 boolean isExpanded = moduleSettingsExpanded.getOrDefault(module, false);
                 moduleY += 30;
 
@@ -417,7 +418,7 @@ public class ClickGui extends GuiScreen {
             int totalHeight = 0;
 
             if (selectedCategory != null) {
-                for (Main.Module module : selectedCategory.getModules()) {
+                for (Module module : selectedCategory.getModules()) {
                     totalHeight += 30;
                     if (moduleSettingsExpanded.getOrDefault(module, false)) {
                         totalHeight += 25 * module.getSettings().size();
