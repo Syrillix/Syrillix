@@ -1,8 +1,9 @@
-package atoll.features.fishing;
+package atoll.modules.features.fishing;
 
 import atoll.Main;
 import atoll.gui.Category;
 import atoll.gui.setting.Setting;
+import atoll.modules.features.Module;
 import net.minecraft.client.Minecraft;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.projectile.EntityFishHook;
@@ -21,7 +22,7 @@ import org.lwjgl.input.Keyboard;
 
 import java.util.Random;
 
-public class AutoFish extends Main.Module {
+public class AutoFish extends Module {
 
     private final Minecraft mc = Minecraft.getMinecraft();
     private final Random random = new Random();

@@ -1,8 +1,9 @@
-package atoll.features.combat;
+package atoll.modules.features.combat;
 
 import atoll.Main;
 import atoll.gui.Category;
 import atoll.gui.setting.Setting;
+import atoll.modules.features.Module;
 import atoll.util.robotUtil.RobotUtil;
 import net.minecraft.client.Minecraft;
 import net.minecraft.entity.Entity;
@@ -18,14 +19,14 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
 
-public class ZombieKiller extends Main.Module {
+public class ZombieKiller extends Module {
 
-    private Setting.BooleanSetting showMessages;
-    private Setting.BooleanSetting showPath;
-    private Setting.BooleanSetting enableParkour;
-    private Setting.SliderSetting searchRadius;
-    private Setting.SliderSetting attackRange;
-    private Setting.BooleanSetting targetClosest;
+    private final Setting.BooleanSetting showMessages;
+    private final Setting.BooleanSetting showPath;
+    private final Setting.BooleanSetting enableParkour;
+    private final Setting.SliderSetting searchRadius;
+    private final Setting.SliderSetting attackRange;
+    private final Setting.BooleanSetting targetClosest;
 
     private EntityZombie currentTarget;
     private int retargetCooldown = 0;

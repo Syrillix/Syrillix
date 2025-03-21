@@ -1,8 +1,9 @@
-package atoll.features.test;
+package atoll.modules.features.test;
 
 import atoll.Main;
 import atoll.gui.Category;
 import atoll.gui.setting.Setting;
+import atoll.modules.features.Module;
 import atoll.util.robotUtil.RobotUtil;
 import net.minecraft.client.Minecraft;
 import net.minecraft.util.ChatComponentText;
@@ -11,7 +12,7 @@ import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.TickEvent;
 import org.lwjgl.input.Keyboard;
 
-public class Robots extends Main.Module {
+public class Robots extends Module {
 
     private Setting.BooleanSetting showText;
     private Setting.BooleanSetting enableAttack;

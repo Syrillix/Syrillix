@@ -1,6 +1,6 @@
 package atoll;
 
-import atoll.features.ModuleManager;
+import atoll.modules.features.ModuleManager;
 import atoll.gui.ClickGui;
 import atoll.gui.Category;
 import atoll.gui.setting.Setting;
@@ -17,8 +17,6 @@ import net.minecraftforge.fml.common.gameevent.InputEvent.KeyInputEvent;
 import net.minecraftforge.fml.common.gameevent.TickEvent;
 import org.lwjgl.input.Keyboard;
 
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -108,66 +106,5 @@ public class Main {
 
     public static Main getInstance() {
         return instance;
-    }
-
-    // Базовый класс Module
-    public static abstract class Module {
-        private final String name;
-        private int keyBind;
-        private boolean enabled;
-        private final Category category;
-        private final List<Setting> settings = new ArrayList<>();
-
-        public Module(String name, int keyBind, Category.CategoryType categoryType) {
-            this.name = name;
-            this.keyBind = keyBind;
-            this.category = Category.getCategory(categoryType);
-            this.enabled = false;
-
-            if (this.category != null) {
-                this.category.addModule(this);
-            }
-        }
-
-        public String getName() {
-            return name;
-        }
-
-        public int getKeyBind() {
-            return keyBind;
-        }
-
-        public void setKeyBind(int keyBind) {
-            this.keyBind = keyBind;
-        }
-
-        public boolean isEnabled() {
-            return enabled;
-        }
-
-        public void toggle() {
-            enabled = !enabled;
-            if (enabled) {
-                onEnable();
-            } else {
-                onDisable();
-            }
-        }
-
-        public void onEnable() {}
-
-        public void onDisable() {}
-
-        public Category getCategory() {
-            return category;
-        }
-
-        public void addSetting(Setting setting) {
-            settings.add(setting);
-        }
-
-        public List<Setting> getSettings() {
-            return settings;
-        }
     }
 }
