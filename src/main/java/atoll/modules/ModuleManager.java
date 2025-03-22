@@ -1,6 +1,8 @@
 package atoll.modules;
 
-import atoll.modules.features.combat.ZombieKiller;
+import atoll.modules.features.combat.*;
+import atoll.modules.features.ender.*;
+import atoll.modules.features.render.InvHud;
 import atoll.modules.features.test.*;
 import atoll.modules.features.fishing.*;
 import atoll.gui.Category.CategoryType;
@@ -23,6 +25,8 @@ public class ModuleManager {
         registerModule(new Robots());
         registerModule(new AutoFish());
         registerModule(new ZombieKiller());
+        registerModule(new EnderNodeESP());
+        registerModule(new InvHud());
     }
 
     public void registerModule(Module module) {

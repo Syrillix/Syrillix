@@ -18,8 +18,8 @@ public class Category {
     public enum CategoryType {
         TEST("TEST"),
         GARDEN("Garden"),
-        ZEALOT("Zealot"),
-        FORAGING("Foraging"),
+        END("EnderWorld"),
+        RENDER("Render"),
         COMBAT("Combat"),
         FISHING("Fishing");
 

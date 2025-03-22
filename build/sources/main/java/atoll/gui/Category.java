@@ -1,31 +1,27 @@
 package atoll.gui;
 
-import atoll.Main;
+import atoll.modules.Module;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 public class Category {
-    private static Map<CategoryType, Category> categories = new HashMap<>();
+    private static final Map<CategoryType, Category> categories = new EnumMap<>(CategoryType.class);
     private static boolean initialized = false;
 
-    private String name;
+    private final String name;
     private int x;
     private int y;
-    private List<Main.Module> modules = new ArrayList<>();
+    private final List<Module> modules = new ArrayList<>();
     private boolean expanded = true;
-    private CategoryType type;
+    private final CategoryType type;
 
     public enum CategoryType {
         TEST("TEST"),
         GARDEN("Garden"),
-        ZEALOT("Zealot"),
-        FORAGING("Foraging"),
+        END("EnderWorld"),
+        RENDER("Render"),
         COMBAT("Combat"),
         FISHING("Fishing");
-
 
         private final String displayName;
 
@@ -61,17 +57,13 @@ public class Category {
     }
 
     public static Category getCategory(CategoryType type) {
-        if (!initialized) {
-            initializeCategories();
-        }
+        initializeCategories(); // Ленивая инициализация
         return categories.get(type);
     }
 
     public static List<Category> getCategories() {
-        if (!initialized) {
-            initializeCategories();
-        }
-        return new ArrayList<>(categories.values());
+        initializeCategories(); // Ленивая инициализация
+        return Collections.unmodifiableList(new ArrayList<>(categories.values()));
     }
 
     public String getName() {
@@ -94,11 +86,11 @@ public class Category {
         this.y = y;
     }
 
-    public List<Main.Module> getModules() {
-        return modules;
+    public List<Module> getModules() {
+        return Collections.unmodifiableList(modules);
     }
 
-    public void addModule(Main.Module module) {
+    public void addModule(Module module) {
         modules.add(module);
     }
 

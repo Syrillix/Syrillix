@@ -5,6 +5,9 @@
       <module fileurl="file://$PROJECT_DIR$/.idea/modules/1.8.9ForgeTemplate-master.api.iml" filepath="$PROJECT_DIR$/.idea/modules/1.8.9ForgeTemplate-master.api.iml" />
       <module fileurl="file://$PROJECT_DIR$/.idea/modules/1.8.9ForgeTemplate-master.main.iml" filepath="$PROJECT_DIR$/.idea/modules/1.8.9ForgeTemplate-master.main.iml" />
       <module fileurl="file://$PROJECT_DIR$/.idea/modules/1.8.9ForgeTemplate-master.test.iml" filepath="$PROJECT_DIR$/.idea/modules/1.8.9ForgeTemplate-master.test.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/atoll.api.iml" filepath="$PROJECT_DIR$/.idea/modules/atoll.api.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/atoll.main.iml" filepath="$PROJECT_DIR$/.idea/modules/atoll.main.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/atoll.test.iml" filepath="$PROJECT_DIR$/.idea/modules/atoll.test.iml" />
     </modules>
   </component>
 </project>
