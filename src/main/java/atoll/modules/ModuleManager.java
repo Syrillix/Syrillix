@@ -2,6 +2,8 @@ package atoll.modules;
 
 import atoll.modules.features.combat.*;
 import atoll.modules.features.ender.*;
+import atoll.modules.features.garden.AimToCleanBlock;
+import atoll.modules.features.garden.CleanPlotESP;
 import atoll.modules.features.render.InvHud;
 import atoll.modules.features.test.*;
 import atoll.modules.features.fishing.*;
@@ -30,7 +32,16 @@ public class ModuleManager {
 
         //123
         registerModule(new ZombieKiller());
+
+        //ender
         registerModule(new EnderNodeESP());
+        registerModule(new ZealotFarm());
+
+        //garden
+        registerModule(new CleanPlotESP());
+        registerModule(new AimToCleanBlock());
+
+
         registerModule(new InvHud());
     }
 
