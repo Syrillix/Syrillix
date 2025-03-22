@@ -3,6 +3,7 @@ package atoll.util.robotUtil;
 import net.minecraft.block.Block;
 import net.minecraft.block.material.Material;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.settings.KeyBinding;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityLivingBase;
 import net.minecraft.entity.monster.EntityMob;
@@ -10,19 +11,23 @@ import net.minecraft.util.BlockPos;
 import net.minecraft.util.EnumFacing;
 import net.minecraft.util.MathHelper;
 import net.minecraft.util.Vec3;
+import org.lwjgl.opengl.GL11;
 
 import java.util.*;
-import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ThreadLocalRandom;
 
 public class RobotUtil {
     private static final Minecraft mc = Minecraft.getMinecraft();
     private static final double ATTACK_RANGE = 3.0;
     private static final double INTERACTION_RANGE = 3.0;
-    private static final int PATH_UPDATE_INTERVAL = 40; // ticks
+    private static final int PATH_UPDATE_INTERVAL = 20; // ticks
     private static final int MAX_PATH_LENGTH = 300;
     private static final int MAX_JUMP_HEIGHT = 1;
     private static final int MAX_FALL_HEIGHT = 4;
     private static final double PARKOUR_JUMP_DISTANCE = 4.0;
+    private static final int TERRAIN_SCAN_RADIUS = 32; // Blocks to scan around player
+    private static final int TERRAIN_SCAN_HEIGHT = 10; // Blocks to scan up/down
 
     private static BlockPos targetPos;
     private static List<BlockPos> currentPath = new ArrayList<>();
@@ -34,8 +39,9 @@ public class RobotUtil {
     // For stuck detection
     private static Vec3 lastPosition = null;
     private static int stuckCounter = 0;
-    private static int stuckJumpCounter = 0;
     private static int consecutiveStuckCount = 0;
+    private static long lastStuckTime = 0;
+    private static Set<BlockPos> stuckPositions = new HashSet<>();
 
     // For movement control
     private static boolean isForwardKeyPressed = false;
@@ -46,17 +52,35 @@ public class RobotUtil {
     private static boolean isSneakKeyPressed = false;
     private static boolean isSprintKeyPressed = false;
 
-    // For parkour and special movements
-    private static boolean isParkourJumping = false;
-    private static int parkourJumpTicks = 0;
-    private static BlockPos parkourTarget = null;
+    // For smooth camera movement
+    private static float targetYaw = 0;
+    private static float targetPitch = 0;
+    private static float yawSpeed = 0;
+    private static float pitchSpeed = 0;
+    private static long lastCameraUpdate = 0;
+    private static boolean isLookingAround = false;
+    private static int lookAroundTicks = 0;
 
     // For terrain analysis
-    private static Map<BlockPos, TerrainInfo> terrainCache = new HashMap<>();
+    private static Map<BlockPos, TerrainInfo> terrainCache = new ConcurrentHashMap<>();
     private static long lastTerrainCacheClear = 0;
+    private static long lastTerrainScan = 0;
+    private static boolean isTerrainScanned = false;
+    private static Set<BlockPos> walkableBlocks = new HashSet<>();
+    private static Set<BlockPos> jumpableBlocks = new HashSet<>();
+    private static Set<BlockPos> waterBlocks = new HashSet<>();
+    private static Set<BlockPos> dangerBlocks = new HashSet<>();
 
     // For path visualization
     private static List<BlockPos> pathForRendering = new ArrayList<>();
+
+    // For natural movement
+    private static int idleTicks = 0;
+    private static int randomMovementTicks = 0;
+    private static boolean isRandomMovement = false;
+    private static float lastMovementVariation = 0;
+    private static long lastJumpTime = 0;
+    private static int movementStyle = 0; // 0 = normal, 1 = cautious, 2 = aggressive
 
     public static void setTargetPos(int x, int y, int z) {
         targetPos = new BlockPos(x, y, z);
@@ -67,9 +91,14 @@ public class RobotUtil {
         stuckCounter = 0;
         consecutiveStuckCount = 0;
         lastPosition = null;
-        isParkourJumping = false;
-        parkourJumpTicks = 0;
-        parkourTarget = null;
+        isTerrainScanned = false;
+        stuckPositions.clear();
+
+        // Reset movement style randomly for variety
+        movementStyle = ThreadLocalRandom.current().nextInt(3);
+
+        // Force a terrain scan
+        scanTerrain();
     }
 
     public static BlockPos getTargetPos() {
@@ -82,9 +111,7 @@ public class RobotUtil {
         pathForRendering.clear();
         targetPos = null;
         resetMovementControls();
-        isParkourJumping = false;
-        parkourJumpTicks = 0;
-        parkourTarget = null;
+        isRandomMovement = false;
     }
 
     public static void setAttackMode(boolean attack) {
@@ -95,7 +122,6 @@ public class RobotUtil {
         isParkourMode = parkour;
     }
 
-
     public static void update() {
         if (mc.thePlayer == null || mc.theWorld == null) return;
 
@@ -103,27 +129,33 @@ public class RobotUtil {
         resetMovementControls();
 
         // Clear terrain cache periodically
-        if (System.currentTimeMillis() - lastTerrainCacheClear > 30000) { // 30 seconds
+        if (System.currentTimeMillis() - lastTerrainCacheClear > 60000) { // 60 seconds
             terrainCache.clear();
+            isTerrainScanned = false;
             lastTerrainCacheClear = System.currentTimeMillis();
         }
 
-        if (isMoving && targetPos != null) {
+        // Scan terrain if needed
+        if (!isTerrainScanned || System.currentTimeMillis() - lastTerrainScan > 10000) { // 10 seconds
+            scanTerrain();
+        }
+
+        // Update camera smoothly
+        updateCamera();
+
+        // Handle idle behavior when not moving
+        if (!isMoving) {
+            handleIdleBehavior();
+            applyMovementControls();
+            return;
+        }
+
+        if (targetPos != null) {
             // Check if we've reached the target
-            double distToTarget = mc.thePlayer.getDistance(
-                    targetPos.getX() + 0.5,
-                    targetPos.getY(),
-                    targetPos.getZ() + 0.5);
+            double distToTarget = getDistanceToPos(targetPos);
 
-            if (distToTarget < 1.0) {
+            if (distToTarget < 0.8) {
                 stopMovement();
-                return;
-            }
-
-            // Handle special parkour jump if active
-            if (isParkourJumping) {
-                handleParkourJump();
-                applyMovementControls();
                 return;
             }
 
@@ -142,6 +174,9 @@ public class RobotUtil {
             // Navigate along the path
             if (!currentPath.isEmpty()) {
                 navigateAlongPath();
+            } else if (targetPos != null) {
+                // If no path found, try to move directly towards target
+                moveDirectlyTowardsTarget();
             }
         }
 
@@ -149,6 +184,9 @@ public class RobotUtil {
         if (isAttacking) {
             handleCombat();
         }
+
+        // Add natural movement variations
+        addNaturalMovementVariations();
 
         // Apply movement controls
         applyMovementControls();
@@ -164,7 +202,6 @@ public class RobotUtil {
         isSprintKeyPressed = false;
     }
 
-
     private static void applyMovementControls() {
         // Apply key states
         mc.gameSettings.keyBindForward.setKeyBindState(mc.gameSettings.keyBindForward.getKeyCode(), isForwardKeyPressed);
@@ -174,6 +211,57 @@ public class RobotUtil {
         mc.gameSettings.keyBindJump.setKeyBindState(mc.gameSettings.keyBindJump.getKeyCode(), isJumpKeyPressed);
         mc.gameSettings.keyBindSneak.setKeyBindState(mc.gameSettings.keyBindSneak.getKeyCode(), isSneakKeyPressed);
         mc.gameSettings.keyBindSprint.setKeyBindState(mc.gameSettings.keyBindSprint.getKeyCode(), isSprintKeyPressed);
+    }
+
+    private static void scanTerrain() {
+        if (mc.thePlayer == null || mc.theWorld == null) return;
+
+        walkableBlocks.clear();
+        jumpableBlocks.clear();
+        waterBlocks.clear();
+        dangerBlocks.clear();
+
+        BlockPos playerPos = new BlockPos(mc.thePlayer.posX, mc.thePlayer.posY, mc.thePlayer.posZ);
+
+        // Scan area around player
+        for (int x = -TERRAIN_SCAN_RADIUS; x <= TERRAIN_SCAN_RADIUS; x++) {
+            for (int z = -TERRAIN_SCAN_RADIUS; z <= TERRAIN_SCAN_RADIUS; z++) {
+                // Skip blocks that are too far away (circular scan)
+                if (x*x + z*z > TERRAIN_SCAN_RADIUS*TERRAIN_SCAN_RADIUS) continue;
+
+                for (int y = -TERRAIN_SCAN_HEIGHT; y <= TERRAIN_SCAN_HEIGHT; y++) {
+                    BlockPos pos = playerPos.add(x, y, z);
+                    analyzeBlock(pos);
+                }
+            }
+        }
+
+        isTerrainScanned = true;
+        lastTerrainScan = System.currentTimeMillis();
+    }
+
+    private static void analyzeBlock(BlockPos pos) {
+        if (canStandAt(pos)) {
+            walkableBlocks.add(pos);
+
+            // Check if this is a jumpable position
+            if (isAirBlock(pos.up()) && isAirBlock(pos.up(2))) {
+                jumpableBlocks.add(pos);
+            }
+        }
+
+        // Check for water
+        if (!isAirBlock(pos) && mc.theWorld.getBlockState(pos).getBlock().getMaterial().isLiquid()) {
+            waterBlocks.add(pos);
+        }
+
+        // Check for dangerous blocks (lava, cactus, etc.)
+        Block block = mc.theWorld.getBlockState(pos).getBlock();
+        Material material = block.getMaterial();
+        if (material == Material.lava || material == Material.fire ||
+                block.getUnlocalizedName().contains("cactus")) {
+            dangerBlocks.add(pos);
+        }
     }
 
     private static void calculatePath() {
@@ -202,28 +290,49 @@ public class RobotUtil {
 
         // Total distance
         double dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
-        int steps = Math.max(1, (int)(dist / 3));
+        int steps = Math.max(1, (int)(dist / 2)); // More granular steps
 
         for (int i = 1; i <= steps; i++) {
             double t = i / (double)steps;
             int x = start.getX() + (int)(dx * t);
             int y = start.getY() + (int)(dy * t);
             int z = start.getZ() + (int)(dz * t);
-            path.add(new BlockPos(x, y, z));
+
+            // Try to find a valid Y position
+            BlockPos pos = new BlockPos(x, y, z);
+            BlockPos validPos = findValidYPosition(pos);
+            if (validPos != null) {
+                path.add(validPos);
+            } else {
+                path.add(pos); // Add original even if not valid
+            }
         }
 
         path.add(end);
         return path;
     }
 
+    private static BlockPos findValidYPosition(BlockPos pos) {
+        // Check current position first
+        if (canStandAt(pos)) return pos;
+
+        // Check a few blocks up and down
+        for (int y = 1; y <= 3; y++) {
+            BlockPos upPos = pos.up(y);
+            if (canStandAt(upPos)) return upPos;
+
+            BlockPos downPos = pos.down(y);
+            if (canStandAt(downPos)) return downPos;
+        }
+
+        return null;
+    }
+
     private static void navigateAlongPath() {
         if (currentPath.isEmpty()) return;
 
         BlockPos nextPoint = currentPath.get(0);
-        double distToNext = mc.thePlayer.getDistance(
-                nextPoint.getX() + 0.5,
-                nextPoint.getY(),
-                nextPoint.getZ() + 0.5);
+        double distToNext = getDistanceToPos(nextPoint);
 
         // If we're close enough to the next point, remove it and move to the next one
         if (distToNext < 0.8) {
@@ -238,40 +347,95 @@ public class RobotUtil {
         double dz = (nextPoint.getZ() + 0.5) - mc.thePlayer.posZ;
         double horizontalDist = Math.sqrt(dx*dx + dz*dz);
 
-        // Calculate target yaw
-        float targetYaw = (float) Math.toDegrees(Math.atan2(dz, dx)) - 90F;
+        // Set target yaw for smooth camera movement
+        targetYaw = (float) Math.toDegrees(Math.atan2(dz, dx)) - 90F;
 
-        // Smooth rotation with natural-looking speed
+        // Calculate yaw difference
         float yawDiff = MathHelper.wrapAngleTo180_float(targetYaw - mc.thePlayer.rotationYaw);
-        float rotationSpeed = Math.min(5.0F, Math.abs(yawDiff) / 2);
 
-        if (Math.abs(yawDiff) > 3.0F) {
-            mc.thePlayer.rotationYaw += Math.signum(yawDiff) * rotationSpeed;
+        // Look slightly downward when moving
+        if (Math.abs(yawDiff) < 30.0F) {
+            targetPitch = 10.0F + (float)(Math.random() * 5.0); // Slight randomness
         }
+
+        // Determine movement keys based on yaw difference
+        if (Math.abs(yawDiff) < 60.0F) {
+            isForwardKeyPressed = true;
+
+            // Sprint if we have a clear path ahead and not in cautious mode
+            if (Math.abs(yawDiff) < 20.0F && horizontalDist > 2.0 && isClearAhead() && movementStyle != 1) {
+                isSprintKeyPressed = true;
+            }
+        } else if (yawDiff > 60.0F && yawDiff < 120.0F) {
+            isLeftKeyPressed = true;
+            if (Math.abs(yawDiff) < 90.0F) isForwardKeyPressed = true;
+        } else if (yawDiff < -60.0F && yawDiff > -120.0F) {
+            isRightKeyPressed = true;
+            if (Math.abs(yawDiff) < 90.0F) isForwardKeyPressed = true;
+        } else {
+            // If we're facing completely wrong direction, turn in place
+            if (Math.abs(yawDiff) > 150.0F) {
+                // Randomly choose direction to turn for more natural movement
+                if (Math.random() < 0.5) {
+                    isLeftKeyPressed = true;
+                } else {
+                    isRightKeyPressed = true;
+                }
+            } else {
+                isBackKeyPressed = true;
+            }
+        }
+
+        // Handle jumping for obstacles
+        if (dy > 0.1 && mc.thePlayer.onGround) {
+            // Add a small random delay before jumping for natural movement
+            if (System.currentTimeMillis() - lastJumpTime > 300) {
+                isJumpKeyPressed = true;
+                lastJumpTime = System.currentTimeMillis();
+            }
+        }
+
+        // Handle sneaking for steep drops
+        if (dy < -1.0 || isEdgeAhead()) {
+            isSneakKeyPressed = true;
+        }
+
+        // Check for water ahead
+        if (isWaterAhead()) {
+            // Keep swimming up if underwater
+            if (mc.thePlayer.isInWater()) {
+                isJumpKeyPressed = true;
+            }
+        }
+    }
+
+    private static void moveDirectlyTowardsTarget() {
+        if (targetPos == null) return;
+
+        // Calculate direction to target
+        double dx = (targetPos.getX() + 0.5) - mc.thePlayer.posX;
+        double dy = targetPos.getY() - mc.thePlayer.posY;
+        double dz = (targetPos.getZ() + 0.5) - mc.thePlayer.posZ;
+        double horizontalDist = Math.sqrt(dx*dx + dz*dz);
+
+        // Set target yaw for smooth camera movement
+        targetYaw = (float) Math.toDegrees(Math.atan2(dz, dx)) - 90F;
+
+        // Calculate yaw difference
+        float yawDiff = MathHelper.wrapAngleTo180_float(targetYaw - mc.thePlayer.rotationYaw);
+
+        // Set target pitch based on vertical difference
+        targetPitch = (float) -Math.toDegrees(Math.atan2(dy, horizontalDist));
 
         // Determine movement keys based on yaw difference
         if (Math.abs(yawDiff) < 45.0F) {
             isForwardKeyPressed = true;
-
-            // Sprint if we have a clear path ahead
-            if (Math.abs(yawDiff) < 10.0F && horizontalDist > 2.0 && isClearAhead()) {
-                isSprintKeyPressed = true;
-            }
         } else if (yawDiff > 45.0F && yawDiff < 135.0F) {
             isLeftKeyPressed = true;
         } else if (yawDiff < -45.0F && yawDiff > -135.0F) {
             isRightKeyPressed = true;
         } else {
             isBackKeyPressed = true;
-        }
-
-        // Check for parkour opportunities if enabled
-        if (isParkourMode && currentPath.size() > 1 && mc.thePlayer.onGround) {
-            BlockPos nextNextPoint = currentPath.get(1);
-            if (canParkourJumpTo(nextPoint, nextNextPoint)) {
-                startParkourJump(nextNextPoint);
-                return;
-            }
         }
 
         // Handle jumping for obstacles
@@ -283,127 +447,161 @@ public class RobotUtil {
         if (dy < -1.0 || isEdgeAhead()) {
             isSneakKeyPressed = true;
         }
-
-        // Look slightly downward when moving to help with placement
-        if (isForwardKeyPressed && Math.abs(yawDiff) < 30.0F) {
-            mc.thePlayer.rotationPitch = 15.0F;
-        }
     }
 
-    private static void handleParkourJump() {
-        if (parkourTarget == null) {
-            isParkourJumping = false;
-            return;
-        }
+    private static void updateCamera() {
+        // Calculate time delta for smooth movement
+        long currentTime = System.currentTimeMillis();
+        float deltaTime = (currentTime - lastCameraUpdate) / 1000.0f;
+        lastCameraUpdate = currentTime;
 
-        // Calculate direction to target
-        double dx = (parkourTarget.getX() + 0.5) - mc.thePlayer.posX;
-        double dz = (parkourTarget.getZ() + 0.5) - mc.thePlayer.posZ;
+        // Limit delta time to prevent jumps after lag
+        deltaTime = Math.min(deltaTime, 0.1f);
 
-        // Calculate target yaw
-        float targetYaw = (float) Math.toDegrees(Math.atan2(dz, dx)) - 90F;
-
-        // Smooth rotation
+        // Calculate yaw difference
         float yawDiff = MathHelper.wrapAngleTo180_float(targetYaw - mc.thePlayer.rotationYaw);
-        float rotationSpeed = Math.min(5.0F, Math.abs(yawDiff) / 2);
 
-        if (Math.abs(yawDiff) > 3.0F) {
-            mc.thePlayer.rotationYaw += Math.signum(yawDiff) * rotationSpeed;
+        // Calculate pitch difference
+        float pitchDiff = targetPitch - mc.thePlayer.rotationPitch;
+
+        // Calculate rotation speeds with natural acceleration/deceleration
+        float targetYawSpeed = Math.min(8.0f, Math.abs(yawDiff) * 0.3f);
+        float targetPitchSpeed = Math.min(8.0f, Math.abs(pitchDiff) * 0.3f);
+
+        // Smoothly adjust current speed towards target speed
+        yawSpeed = lerp(yawSpeed, targetYawSpeed, deltaTime * 5.0f);
+        pitchSpeed = lerp(pitchSpeed, targetPitchSpeed, deltaTime * 5.0f);
+
+        // Apply rotation with speed limit
+        if (Math.abs(yawDiff) > 0.1f) {
+            mc.thePlayer.rotationYaw += Math.signum(yawDiff) * yawSpeed * deltaTime * 50.0f;
         }
 
-        // Always move forward during parkour jump
-        isForwardKeyPressed = true;
-
-        // Sprint for longer jumps
-        isSprintKeyPressed = true;
-
-        // Jump at the right moment
-        if (parkourJumpTicks == 0 && mc.thePlayer.onGround) {
-            isJumpKeyPressed = true;
+        if (Math.abs(pitchDiff) > 0.1f) {
+            float newPitch = mc.thePlayer.rotationPitch + Math.signum(pitchDiff) * pitchSpeed * deltaTime * 50.0f;
+            // Clamp pitch to prevent looking too far up/down
+            mc.thePlayer.rotationPitch = MathHelper.clamp_float(newPitch, -89.0f, 89.0f);
         }
 
-        // Increment jump ticks
-        parkourJumpTicks++;
+        // Add subtle natural head movement
+        if (!isLookingAround && Math.random() < 0.002) {
+            isLookingAround = true;
+            lookAroundTicks = (int)(Math.random() * 40) + 20;
 
-        // End parkour jump after a certain time or if we've reached the target
-        double distToTarget = mc.thePlayer.getDistance(
-                parkourTarget.getX() + 0.5,
-                parkourTarget.getY(),
-                parkourTarget.getZ() + 0.5);
+            // Set random look target
+            float randomYaw = mc.thePlayer.rotationYaw + (float)(Math.random() * 30.0 - 15.0);
+            float randomPitch = mc.thePlayer.rotationPitch + (float)(Math.random() * 20.0 - 10.0);
 
-        if (parkourJumpTicks > 40 || distToTarget < 1.0 || mc.thePlayer.onGround && parkourJumpTicks > 10) {
-            isParkourJumping = false;
-            parkourJumpTicks = 0;
-            parkourTarget = null;
+            if (isMoving) {
+                // Smaller random movements while moving
+                randomYaw = mc.thePlayer.rotationYaw + (float)(Math.random() * 10.0 - 5.0);
+                randomPitch = mc.thePlayer.rotationPitch + (float)(Math.random() * 6.0 - 3.0);
+            }
+
+            targetYaw = randomYaw;
+            targetPitch = MathHelper.clamp_float(randomPitch, -80.0f, 80.0f);
+        }
+
+        if (isLookingAround) {
+            lookAroundTicks--;
+            if (lookAroundTicks <= 0) {
+                isLookingAround = false;
+            }
         }
     }
 
-    private static void startParkourJump(BlockPos target) {
-        isParkourJumping = true;
-        parkourJumpTicks = 0;
-        parkourTarget = target;
-
-        // Look at the target
-        double dx = (target.getX() + 0.5) - mc.thePlayer.posX;
-        double dy = (target.getY() + 0.5) - mc.thePlayer.posY;
-        double dz = (target.getZ() + 0.5) - mc.thePlayer.posZ;
-
-        float yaw = (float) Math.toDegrees(Math.atan2(dz, dx)) - 90F;
-        float pitch = (float) -Math.toDegrees(Math.atan2(dy, Math.sqrt(dx*dx + dz*dz)));
-
-        mc.thePlayer.rotationYaw = yaw;
-        mc.thePlayer.rotationPitch = pitch;
+    private static float lerp(float a, float b, float t) {
+        return a + t * (b - a);
     }
 
-    private static boolean canParkourJumpTo(BlockPos current, BlockPos target) {
-        // Calculate horizontal and vertical distance
-        double dx = target.getX() - current.getX();
-        double dy = target.getY() - current.getY();
-        double dz = target.getZ() - current.getZ();
-        double horizontalDist = Math.sqrt(dx*dx + dz*dz);
+    private static void handleIdleBehavior() {
+        idleTicks++;
 
-        // Check if the jump is within possible range
-        if (horizontalDist > PARKOUR_JUMP_DISTANCE || horizontalDist < 2.0) {
-            return false;
+        // Occasionally look around when idle
+        if (idleTicks % 100 == 0 && Math.random() < 0.3) {
+            isLookingAround = true;
+            lookAroundTicks = (int)(Math.random() * 60) + 40;
+
+            // Set random look target
+            targetYaw = mc.thePlayer.rotationYaw + (float)(Math.random() * 120.0 - 60.0);
+            targetPitch = (float)(Math.random() * 50.0 - 30.0);
         }
 
-        // Check if the vertical difference is reasonable
-        if (dy > 1.0 || dy < -1.0) {
-            return false;
+        // Occasionally make small random movements
+        if (idleTicks % 200 == 0 && Math.random() < 0.2) {
+            isRandomMovement = true;
+            randomMovementTicks = (int)(Math.random() * 40) + 20;
         }
 
-        // Check if there's a gap between the blocks
-        for (int i = 1; i < horizontalDist; i++) {
-            double t = i / horizontalDist;
-            int x = current.getX() + (int)(dx * t);
-            int y = current.getY();
-            int z = current.getZ() + (int)(dz * t);
+        if (isRandomMovement) {
+            // Random movement pattern
+            int pattern = (idleTicks / 10) % 6;
 
-            BlockPos pos = new BlockPos(x, y, z);
-            BlockPos below = pos.down();
-
-            // If there's a block in the way, we can't jump
-            if (!isAirBlock(pos) || !isAirBlock(pos.up())) {
-                return false;
+            switch (pattern) {
+                case 0:
+                    isForwardKeyPressed = true;
+                    break;
+                case 1:
+                    isBackKeyPressed = true;
+                    break;
+                case 2:
+                    isLeftKeyPressed = true;
+                    break;
+                case 3:
+                    isRightKeyPressed = true;
+                    break;
+                case 4:
+                    isForwardKeyPressed = true;
+                    isLeftKeyPressed = true;
+                    break;
+                case 5:
+                    isForwardKeyPressed = true;
+                    isRightKeyPressed = true;
+                    break;
             }
 
-            // If there's a block below, it's not a gap
-            if (!isAirBlock(below)) {
-                return false;
+            // Occasionally jump
+            if (Math.random() < 0.01 && mc.thePlayer.onGround) {
+                isJumpKeyPressed = true;
+            }
+
+            randomMovementTicks--;
+            if (randomMovementTicks <= 0) {
+                isRandomMovement = false;
+            }
+        }
+    }
+
+    private static void addNaturalMovementVariations() {
+        // Skip variations if we're stuck or in water
+        if (stuckCounter > 0 || mc.thePlayer.isInWater()) return;
+
+        // Add slight movement variations based on movement style
+        if (isForwardKeyPressed && mc.thePlayer.onGround) {
+            // Update variation every second or so
+            if (mc.thePlayer.ticksExisted % 20 == 0) {
+                lastMovementVariation = (float)(Math.random() * 0.2 - 0.1);
+            }
+
+            // Apply the variation
+            if (lastMovementVariation > 0) {
+                isRightKeyPressed = true;
+            } else if (lastMovementVariation < 0) {
+                isLeftKeyPressed = true;
+            }
+
+            // Occasionally jump while running for natural movement
+            if (isSprintKeyPressed && Math.random() < 0.002 && mc.thePlayer.onGround &&
+                    System.currentTimeMillis() - lastJumpTime > 2000) {
+                isJumpKeyPressed = true;
+                lastJumpTime = System.currentTimeMillis();
             }
         }
 
-        // Check if the target position is solid to land on
-        if (isAirBlock(target.down())) {
-            return false;
+        // Occasionally toggle sprint for natural speed variations
+        if (isForwardKeyPressed && Math.random() < 0.01 && isClearAhead() && movementStyle != 1) {
+            isSprintKeyPressed = !isSprintKeyPressed;
         }
-
-        // Check if there's enough headroom at the target
-        if (!isAirBlock(target) || !isAirBlock(target.up())) {
-            return false;
-        }
-
-        return true;
     }
 
     private static boolean isClearAhead() {
@@ -451,6 +649,28 @@ public class RobotUtil {
         return isAirBlock(ahead);
     }
 
+    private static boolean isWaterAhead() {
+        float yaw = mc.thePlayer.rotationYaw;
+        double x = -Math.sin(Math.toRadians(yaw));
+        double z = Math.cos(Math.toRadians(yaw));
+
+        BlockPos playerPos = new BlockPos(mc.thePlayer.posX, mc.thePlayer.posY, mc.thePlayer.posZ);
+
+        for (int i = 1; i <= 2; i++) {
+            BlockPos ahead = new BlockPos(
+                    playerPos.getX() + x * i,
+                    playerPos.getY(),
+                    playerPos.getZ() + z * i);
+
+            if (!isAirBlock(ahead) &&
+                    mc.theWorld.getBlockState(ahead).getBlock().getMaterial().isLiquid()) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private static void handleCombat() {
         // Find nearest hostile mob
         EntityLivingBase target = findNearestHostileMob();
@@ -465,33 +685,43 @@ public class RobotUtil {
             float yaw = (float) Math.toDegrees(Math.atan2(dz, dx)) - 90F;
             float pitch = (float) -Math.toDegrees(Math.atan2(dy, dist));
 
-            // Smoothly rotate to face target
-            float yawDiff = MathHelper.wrapAngleTo180_float(yaw - mc.thePlayer.rotationYaw);
-            float pitchDiff = MathHelper.wrapAngleTo180_float(pitch - mc.thePlayer.rotationPitch);
-            float rotationSpeed = 5.0F;
-
-            if (Math.abs(yawDiff) > 1.0F) {
-                mc.thePlayer.rotationYaw += Math.signum(yawDiff) * Math.min(Math.abs(yawDiff), rotationSpeed);
-            }
-
-            if (Math.abs(pitchDiff) > 1.0F) {
-                mc.thePlayer.rotationPitch += Math.signum(pitchDiff) * Math.min(Math.abs(pitchDiff), rotationSpeed);
-            }
+            // Set target rotation for smooth camera movement
+            targetYaw = yaw;
+            targetPitch = pitch;
 
             // Attack if facing the target
-            if (Math.abs(yawDiff) < 20F && Math.abs(pitchDiff) < 20F) {
-                if (mc.thePlayer.ticksExisted % 5 == 0) { // Attack every 5 ticks for legitimate behavior
+            float yawDiff = MathHelper.wrapAngleTo180_float(yaw - mc.thePlayer.rotationYaw);
+            float pitchDiff = MathHelper.wrapAngleTo180_float(pitch - mc.thePlayer.rotationPitch);
+
+            if (Math.abs(yawDiff) < 30F && Math.abs(pitchDiff) < 30F) {
+                // Add randomness to attack timing for more natural behavior
+                if (mc.thePlayer.ticksExisted % (3 + ThreadLocalRandom.current().nextInt(5)) == 0) {
                     mc.playerController.attackEntity(mc.thePlayer, target);
                     mc.thePlayer.swingItem();
+                }
+
+                // Occasionally strafe around target
+                if (Math.random() < 0.1) {
+                    if (Math.random() < 0.5) {
+                        isLeftKeyPressed = true;
+                    } else {
+                        isRightKeyPressed = true;
+                    }
+                }
+
+                // Occasionally move back from target
+                if (mc.thePlayer.getDistanceToEntity(target) < 2.0 && Math.random() < 0.2) {
+                    isBackKeyPressed = true;
+                }
+
+                // Occasionally jump during combat
+                if (Math.random() < 0.05 && mc.thePlayer.onGround) {
+                    isJumpKeyPressed = true;
                 }
             }
         }
     }
 
-    /**
-     * Find nearest hostile mob
-     * @return The nearest hostile mob or null if none found
-     */
     private static EntityLivingBase findNearestHostileMob() {
         double closestDistance = Double.MAX_VALUE;
         EntityLivingBase closestEntity = null;
@@ -509,20 +739,24 @@ public class RobotUtil {
         return closestEntity;
     }
 
-    /**
-     * Interact with an NPC menu
-     * @param npc The NPC entity to interact with
-     */
     public static void interactWithNPC(Entity npc) {
         if (npc != null && mc.thePlayer.getDistanceToEntity(npc) <= INTERACTION_RANGE) {
-            mc.playerController.interactWithEntitySendPacket(mc.thePlayer, npc);
+            // Look at NPC first
+            double dx = npc.posX - mc.thePlayer.posX;
+            double dz = npc.posZ - mc.thePlayer.posZ;
+            double dy = npc.posY + npc.getEyeHeight() - (mc.thePlayer.posY + mc.thePlayer.getEyeHeight());
+
+            double dist = Math.sqrt(dx * dx + dz * dz);
+            targetYaw = (float) Math.toDegrees(Math.atan2(dz, dx)) - 90F;
+            targetPitch = (float) -Math.toDegrees(Math.atan2(dy, dist));
+
+            // Wait a bit for camera to adjust before interacting
+            if (Math.abs(MathHelper.wrapAngleTo180_float(targetYaw - mc.thePlayer.rotationYaw)) < 15F) {
+                mc.playerController.interactWithEntitySendPacket(mc.thePlayer, npc);
+            }
         }
     }
 
-    /**
-     * Check if the player is stuck
-     * @return True if the player hasn't moved significantly for a while
-     */
     private static boolean isPlayerStuck() {
         if (lastPosition == null) {
             lastPosition = new Vec3(mc.thePlayer.posX, mc.thePlayer.posY, mc.thePlayer.posZ);
@@ -530,20 +764,34 @@ public class RobotUtil {
         }
 
         double distMoved = mc.thePlayer.getDistance(lastPosition.xCoord, lastPosition.yCoord, lastPosition.zCoord);
-        lastPosition = new Vec3(mc.thePlayer.posX, mc.thePlayer.posY, mc.thePlayer.posZ);
+        Vec3 currentPos = new Vec3(mc.thePlayer.posX, mc.thePlayer.posY, mc.thePlayer.posZ);
 
-        if (distMoved < 0.1) {
+        // Check if we're in a position we've been stuck in before
+        BlockPos currentBlock = new BlockPos(mc.thePlayer.posX, mc.thePlayer.posY, mc.thePlayer.posZ);
+        boolean inKnownStuckPosition = stuckPositions.contains(currentBlock);
+
+        lastPosition = currentPos;
+
+        if (distMoved < 0.05 && isMoving) {
             stuckCounter++;
-            return stuckCounter > 30; // Consider stuck after 1.5 seconds of not moving
+
+            // Consider stuck after not moving for a while
+            boolean isStuck = stuckCounter > 40 || inKnownStuckPosition;
+
+            if (isStuck) {
+                // Record this position as a stuck position
+                stuckPositions.add(currentBlock);
+                lastStuckTime = System.currentTimeMillis();
+            }
+
+            return isStuck;
         } else {
-            stuckCounter = 0;
+            // Gradually reduce stuck counter when moving
+            stuckCounter = Math.max(0, stuckCounter - 1);
             return false;
         }
     }
 
-    /**
-     * Handle a situation where the player is stuck
-     */
     private static void handleStuckSituation() {
         consecutiveStuckCount++;
 
@@ -554,30 +802,52 @@ public class RobotUtil {
         } else if (consecutiveStuckCount == 2) {
             // Second try: jump and move in a random direction
             isJumpKeyPressed = true;
-            int random = (int)(Math.random() * 4);
+            int random = ThreadLocalRandom.current().nextInt(4);
             switch (random) {
                 case 0: isForwardKeyPressed = true; break;
                 case 1: isBackKeyPressed = true; break;
                 case 2: isLeftKeyPressed = true; break;
                 case 3: isRightKeyPressed = true; break;
             }
-        } else if (consecutiveStuckCount >= 3) {
-            // Third try: clear the path and calculate a new one
+        } else if (consecutiveStuckCount == 3) {
+            // Third try: try to break blocks if we're stuck
+            isJumpKeyPressed = true;
+            // Look down slightly to break blocks below
+            targetPitch = 30f;
+
+            // Simulate breaking blocks by right-clicking
+            if (mc.thePlayer.ticksExisted % 5 == 0) {
+                mc.playerController.sendUseItem(mc.thePlayer, mc.theWorld, mc.thePlayer.inventory.getCurrentItem());
+            }
+        } else if (consecutiveStuckCount >= 4) {
+            // Fourth try: clear the path and calculate a new one
             currentPath.clear();
             pathForRendering.clear();
+
+            // Try to find a completely different path by temporarily marking this area as dangerous
+            BlockPos playerPos = new BlockPos(mc.thePlayer.posX, mc.thePlayer.posY, mc.thePlayer.posZ);
+            for (int x = -2; x <= 2; x++) {
+                for (int y = -1; y <= 1; y++) {
+                    for (int z = -2; z <= 2; z++) {
+                        dangerBlocks.add(playerPos.add(x, y, z));
+                    }
+                }
+            }
+
             consecutiveStuckCount = 0;
         }
     }
 
-    /**
-     * A* pathfinding algorithm with terrain analysis
-     * @param start Starting position
-     * @param goal Target position
-     * @return List of positions forming a path
-     */
+    private static double getDistanceToPos(BlockPos pos) {
+        return mc.thePlayer.getDistance(
+                pos.getX() + 0.5,
+                pos.getY(),
+                pos.getZ() + 0.5);
+    }
+
     private static List<BlockPos> findPath(BlockPos start, BlockPos goal) {
         // Maximum iterations to prevent infinite loops
-        final int MAX_ITERATIONS = 2000;
+        final int MAX_ITERATIONS = 3000;
 
         // If start and goal are the same, return empty path
         if (start.equals(goal)) return new ArrayList<>();
@@ -610,7 +880,7 @@ public class RobotUtil {
             PathNode current = openSet.poll();
 
             // If we reached the goal, reconstruct and return the path
-            if (current.pos.equals(goal)) {
+            if (current.pos.equals(goal) || getDistanceBetween(current.pos, goal) < 2.0) {
                 List<BlockPos> path = reconstructPath(current);
                 if (path.size() > MAX_PATH_LENGTH) {
                     path = path.subList(0, MAX_PATH_LENGTH);
@@ -652,50 +922,85 @@ public class RobotUtil {
             }
         }
 
-        // If no path found, create a simple direct path
-        return createDirectPath(start, goal);
-    }
-
-    /**
-     * Get valid neighboring positions with advanced terrain analysis
-     * @param pos Current position
-     * @return List of valid neighboring positions
-     */
-    private static List<BlockPos> getNeighbors(BlockPos pos) {
-        List<BlockPos> neighbors = new ArrayList<>();
-
-        // Check horizontal and diagonal neighbors
-        for (int x = -1; x <= 1; x++) {
-            for (int z = -1; z <= 1; z++) {
-                if (x == 0 && z == 0) continue;
-
-                // Check if we can move horizontally
-                BlockPos newPos = pos.add(x, 0, z);
-                if (canStandAt(newPos)) {
-                    neighbors.add(newPos);
-                }
-
-                // Check if we can move up (climbing)
-                for (int y = 1; y <= MAX_JUMP_HEIGHT; y++) {
-                    BlockPos upPos = pos.add(x, y, z);
-                    if (canStandAt(upPos) && canReach(pos, upPos)) {
-                        neighbors.add(upPos);
-                        break; // Only add the lowest reachable position
+        // If no path found, try to find a path to a position near the goal
+        if (getDistanceBetween(start, goal) > 10.0) {
+            List<BlockPos> nearGoals = new ArrayList<>();
+            for (int x = -5; x <= 5; x++) {
+                for (int y = -5; y <= 5; y++) {
+                    for (int z = -5; z <= 5; z++) {
+                        BlockPos nearGoal = goal.add(x, y, z);
+                        if (canStandAt(nearGoal)) {
+                            nearGoals.add(nearGoal);
+                        }
                     }
                 }
+            }
 
-                // Check if we can move down (falling)
-                for (int y = 1; y <= MAX_FALL_HEIGHT; y++) {
-                    BlockPos downPos = pos.add(x, -y, z);
-                    if (canStandAt(downPos)) {
-                        neighbors.add(downPos);
-                        break; // Only add the highest position we can fall to
-                    }
+            // Sort by distance to original goal
+            nearGoals.sort(Comparator.comparingDouble(pos -> getDistanceBetween(pos, goal)));
+
+            // Try to find path to nearest valid position
+            for (BlockPos nearGoal : nearGoals) {
+                List<BlockPos> path = findPath(start, nearGoal);
+                if (!path.isEmpty()) {
+                    // Add the original goal at the end
+                    path.add(goal);
+                    return path;
                 }
             }
         }
 
-        // Check for parkour jumps if enabled
+        // If still no path found, create a simple direct path
+        return createDirectPath(start, goal);
+    }
+
+    private static double getDistanceBetween(BlockPos pos1, BlockPos pos2) {
+        double dx = pos2.getX() - pos1.getX();
+        double dy = pos2.getY() - pos1.getY();
+        double dz = pos2.getZ() - pos1.getZ();
+        return Math.sqrt(dx*dx + dy*dy + dz*dz);
+    }
+
+    private static List<BlockPos> getNeighbors(BlockPos pos) {
+        List<BlockPos> neighbors = new ArrayList<>();
+
+        for (int x = -1; x <= 1; x++) {
+            for (int z = -1; z <= 1; z++) {
+                if (x == 0 && z == 0) continue;
+
+                BlockPos newPos = pos.add(x, 0, z);
+                if (canStandAt(newPos) && !dangerBlocks.contains(newPos)) {
+                    neighbors.add(newPos);
+                }
+
+                for (int y = 1; y <= MAX_JUMP_HEIGHT; y++) {
+                    BlockPos upPos = pos.add(x, y, z);
+                    if (canStandAt(upPos) && canReach(pos, upPos) && !dangerBlocks.contains(upPos)) {
+                        neighbors.add(upPos);
+                        break;
+                    }
+                }
+                for (int y = 1; y <= MAX_FALL_HEIGHT; y++) {
+                    BlockPos downPos = pos.add(x, -y, z);
+                    if (canStandAt(downPos) && !dangerBlocks.contains(downPos)) {
+                        neighbors.add(downPos);
+                        break;
+                    }
+                }
+            }
+        }
+        for (int x = -1; x <= 1; x++) {
+            for (int y = -1; y <= 1; y++) {
+                for (int z = -1; z <= 1; z++) {
+                    if (x == 0 && y == 0 && z == 0) continue;
+
+                    BlockPos waterPos = pos.add(x, y, z);
+                    if (isWaterBlock(waterPos) && !dangerBlocks.contains(waterPos)) {
+                        neighbors.add(waterPos);
+                    }
+                }
+            }
+        }
         if (isParkourMode) {
             addParkourNeighbors(pos, neighbors);
         }
@@ -703,24 +1008,24 @@ public class RobotUtil {
         return neighbors;
     }
 
-    /**
-     * Add potential parkour jump destinations to neighbors
-     */
+    private static boolean isWaterBlock(BlockPos pos) {
+        return !isAirBlock(pos) &&
+                mc.theWorld.getBlockState(pos).getBlock().getMaterial().isLiquid() &&
+                mc.theWorld.getBlockState(pos).getBlock().getMaterial() != Material.lava;
+    }
+
     private static void addParkourNeighbors(BlockPos pos, List<BlockPos> neighbors) {
-        //
-        // Check for longer jumps in cardinal directions
         for (int dist = 2; dist <= 4; dist++) {
             for (EnumFacing facing : EnumFacing.HORIZONTALS) {
                 BlockPos jumpTarget = pos.offset(facing, dist);
 
-                // Check if we can jump to this position
                 if (canStandAt(jumpTarget) &&
                         isAirBlock(jumpTarget.up()) &&
                         isAirBlock(pos.up(2)) &&
                         isAirBlock(pos.offset(facing).up()) &&
-                        isAirBlock(pos.offset(facing).up(2))) {
+                        isAirBlock(pos.offset(facing).up(2)) &&
+                        !dangerBlocks.contains(jumpTarget)) {
 
-                    // Check if there's a gap between
                     boolean isGap = true;
                     for (int i = 1; i < dist; i++) {
                         BlockPos midPos = pos.offset(facing, i);
@@ -737,19 +1042,17 @@ public class RobotUtil {
             }
         }
 
-        // Check for diagonal jumps
         for (int x = -2; x <= 2; x += 4) {
             for (int z = -2; z <= 2; z += 4) {
                 if (x == 0 && z == 0) continue;
 
                 BlockPos jumpTarget = pos.add(x, 0, z);
 
-                // Check if we can jump to this position
                 if (canStandAt(jumpTarget) &&
                         isAirBlock(jumpTarget.up()) &&
-                        isAirBlock(pos.up(2))) {
+                        isAirBlock(pos.up(2)) &&
+                        !dangerBlocks.contains(jumpTarget)) {
 
-                    // Check if there's a gap between
                     boolean isGap = true;
                     for (int i = 1; i < Math.max(Math.abs(x), Math.abs(z)); i++) {
                         int dx = (int)(x * (i / (double)Math.max(Math.abs(x), Math.abs(z))));
@@ -769,211 +1072,185 @@ public class RobotUtil {
         }
     }
 
-    /**
-     * Check if a position is valid for standing
-     * @param pos Position to check
-     * @return True if the player can stand at this position
-     */
     private static boolean canStandAt(BlockPos pos) {
-        // Check if the position is already in cache
-        if (terrainCache.containsKey(pos)) {
-            return terrainCache.get(pos).canStandAt;
-        }
-
-        // Check if there's enough space for the player
-        boolean hasSpace = isAirBlock(pos) && isAirBlock(pos.up());
-
-        // Check if there's a solid block below to stand on
-        boolean hasSolidGround = !isAirBlock(pos.down()) &&
-                mc.theWorld.getBlockState(pos.down()).getBlock().isBlockNormalCube();
-
-        // Special case for slabs, stairs, etc.
-        if (!hasSolidGround) {
-            Block block = mc.theWorld.getBlockState(pos.down()).getBlock();
-            hasSolidGround = !isAirBlock(pos.down()) && block.isCollidable();
-        }
-
-        // For water, we don't need solid ground
-        boolean isWater = !isAirBlock(pos) &&
-                mc.theWorld.getBlockState(pos).getBlock().getMaterial().isLiquid();
-
-        boolean canStand = hasSpace && (hasSolidGround || isWater);
-
-        // Cache the result
-        TerrainInfo info = new TerrainInfo();
-        info.canStandAt = canStand;
-        terrainCache.put(pos, info);
-
-        return canStand;
+        BlockPos below = pos.down();
+        boolean solidBelow = !isAirBlock(below) &&
+                !mc.theWorld.getBlockState(below).getBlock().getMaterial().isLiquid();
+        boolean spaceForPlayer = isAirBlock(pos) && isAirBlock(pos.up());
+        boolean isWater = isWaterBlock(pos);
+        return (solidBelow || isWater) && (spaceForPlayer || isWater);
     }
 
-    /**
-     * Check if the player can reach from one position to another
-     * @param from Starting position
-     * @param to Target position
-     * @return True if the player can reach the target
-     */
     private static boolean canReach(BlockPos from, BlockPos to) {
-        // Calculate differences
-        int dx = to.getX() - from.getX();
         int dy = to.getY() - from.getY();
-        int dz = to.getZ() - from.getZ();
+        if (dy > MAX_JUMP_HEIGHT) return false;
 
-        // Check vertical difference
-        if (dy > MAX_JUMP_HEIGHT) {
-            return false;
+        if (dy > 0) {
+            for (int y = 1; y <= 2; y++) {
+                if (!isAirBlock(from.up(y))) return false;
+            }
+            BlockPos midPos = new BlockPos(to.getX(), from.getY(), to.getZ());
+            if (!isAirBlock(midPos) || !isAirBlock(midPos.up())) return false;
         }
 
-        // Check if there's a clear path
-        if (Math.abs(dx) <= 1 && Math.abs(dz) <= 1) {
-            // For adjacent blocks, check if there's headroom to jump
-            return isAirBlock(from.up()) && isAirBlock(from.up(2));
-        }
-
-        return false;
+        return true;
     }
 
-    /**
-     * Check if a block is air (or other passable block)
-     * @param pos Position to check
-     * @return True if the block is air or passable
-     */
     private static boolean isAirBlock(BlockPos pos) {
-        return mc.theWorld.getBlockState(pos).getBlock().isPassable(mc.theWorld, pos);
+        return mc.theWorld.getBlockState(pos).getBlock().getMaterial() == Material.air;
     }
 
-    /**
-     * Calculate movement cost between two positions
-     * @param from Starting position
-     * @param to Ending position
-     * @return Movement cost
-     */
     private static double getMoveCost(BlockPos from, BlockPos to) {
-        // Base cost is the Euclidean distance
-        double dx = to.getX() - from.getX();
-        double dy = to.getY() - from.getY();
-        double dz = to.getZ() - from.getZ();
-        double baseCost = Math.sqrt(dx*dx + dy*dy + dz*dz);
-
-        // Additional cost for vertical movement
-        double verticalCost = Math.abs(dy) * 1.5;
-
-        // Additional cost for diagonal movement
-        double diagonalCost = (Math.abs(dx) > 0 && Math.abs(dz) > 0) ? 0.4 : 0;
-
-        // Additional cost for water
-        boolean isWater = !isAirBlock(to) &&
-                mc.theWorld.getBlockState(to).getBlock().getMaterial().isLiquid();
-        double waterCost = isWater ? 2.0 : 0;
-
-        // Additional cost for parkour jumps
-        double parkourCost = 0;
-        if (Math.abs(dx) > 1 || Math.abs(dz) > 1) {
-            parkourCost = 3.0;
+        double baseCost = getDistanceBetween(from, to);
+        int dy = to.getY() - from.getY();
+        if (dy != 0) {
+            baseCost *= 1.5;
         }
-
-        return baseCost + verticalCost + diagonalCost + waterCost + parkourCost;
-    }
-
-    /**
-     * Calculate heuristic cost (estimated cost to goal)
-     * @param from Current position
-     * @param to Goal position
-     * @return Heuristic cost
-     */
-    private static double getHeuristicCost(BlockPos from, BlockPos to) {
-        // Use Manhattan distance as heuristic
-        double dx = Math.abs(to.getX() - from.getX());
-        double dy = Math.abs(to.getY() - from.getY());
-        double dz = Math.abs(to.getZ() - from.getZ());
-
-        // Add a small factor based on straight-line distance to encourage more direct paths
-        double euclidean = Math.sqrt(dx*dx + dy*dy + dz*dz);
-
-        return (dx + dy + dz) * 1.1 + euclidean * 0.5;
-    }
-
-    /**
-     * Reconstruct path from goal to start
-     * @param goalNode Goal node
-     * @return List of positions forming a path
-     */
-    private static List<BlockPos> reconstructPath(PathNode goalNode) {
-        List<BlockPos> path = new ArrayList<>();
-        PathNode current = goalNode;
-
-        // Traverse from goal to start
-        while (current != null) {
-            path.add(0, current.pos);
-            current = current.parent;
+        if (isWaterBlock(to)) {
+            baseCost *= 2.0;
         }
-
-        // Optimize the path by removing unnecessary waypoints
-        return optimizePath(path);
-    }
-
-    /**
-     * Optimize path by removing unnecessary waypoints
-     * @param path Original path
-     * @return Optimized path
-     */
-    private static List<BlockPos> optimizePath(List<BlockPos> path) {
-        if (path.size() <= 2) return path;
-
-        List<BlockPos> optimized = new ArrayList<>();
-        optimized.add(path.get(0));
-
-        // Keep track of current direction
-        int lastDirX = 0;
-        int lastDirY = 0;
-        int lastDirZ = 0;
-
-        for (int i = 1; i < path.size() - 1; i++) {
-            BlockPos prev = path.get(i - 1);
-            BlockPos current = path.get(i);
-            BlockPos next = path.get(i + 1);
-
-            // Calculate directions
-            int dirX1 = current.getX() - prev.getX();
-            int dirY1 = current.getY() - prev.getY();
-            int dirZ1 = current.getZ() - prev.getZ();
-
-            int dirX2 = next.getX() - current.getX();
-            int dirY2 = next.getY() - current.getY();
-            int dirZ2 = next.getZ() - current.getZ();
-
-            // If direction changes or there's a vertical movement, keep this waypoint
-            if (dirX1 != dirX2 || dirY1 != dirY2 || dirZ1 != dirZ2 ||
-                    dirY1 != 0 || dirY2 != 0 ||
-                    (dirX1 != lastDirX || dirY1 != lastDirY || dirZ1 != lastDirZ)) {
-                optimized.add(current);
-                lastDirX = dirX1;
-                lastDirY = dirY1;
-                lastDirZ = dirZ1;
+        for (BlockPos danger : dangerBlocks) {
+            if (getDistanceBetween(to, danger) < 3.0) {
+                baseCost *= 3.0;
+                break;
             }
         }
 
-        // Always add the final point
-        optimized.add(path.get(path.size() - 1));
+        return baseCost;
+    }
 
-        return optimized;
+    private static double getHeuristicCost(BlockPos from, BlockPos goal) {
+        return Math.abs(goal.getX() - from.getX()) +
+                Math.abs(goal.getZ() - from.getZ()) +
+                Math.abs(goal.getY() - from.getY()) * 1.5;
+    }
+
+    private static List<BlockPos> reconstructPath(PathNode endNode) {
+        List<BlockPos> path = new ArrayList<>();
+        PathNode current = endNode;
+
+        while (current != null) {
+            path.add(current.pos);
+            current = current.parent;
+        }
+
+        Collections.reverse(path);
+        return path;
     }
 
 
-    public static List<BlockPos> getPathForRendering() {
-        return pathForRendering;
+
+    public static void renderPath() {
+        if (pathForRendering.isEmpty()) return;
+        double renderX = mc.getRenderManager().viewerPosX;
+        double renderY = mc.getRenderManager().viewerPosY;
+        double renderZ = mc.getRenderManager().viewerPosZ;
+
+        GL11.glPushMatrix();
+        GL11.glDisable(GL11.GL_TEXTURE_2D);
+        GL11.glDisable(GL11.GL_DEPTH_TEST);
+        GL11.glDisable(GL11.GL_LIGHTING);
+        GL11.glEnable(GL11.GL_BLEND);
+        GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
+        GL11.glLineWidth(2.0F);
+
+        GL11.glBegin(GL11.GL_LINE_STRIP);
+
+        for (int i = 0; i < pathForRendering.size(); i++) {
+            BlockPos pos = pathForRendering.get(i);
+
+            float progress = i / (float) (pathForRendering.size() - 1);
+
+            GL11.glColor4f(progress, 1.0F - progress, 0.0F, 0.7F);
+
+            GL11.glVertex3d(
+                    pos.getX() + 0.5 - renderX,
+                    pos.getY() + 0.5 - renderY,
+                    pos.getZ() + 0.5 - renderZ);
+        }
+
+        GL11.glEnd();
+
+        GL11.glPointSize(5.0F);
+        GL11.glBegin(GL11.GL_POINTS);
+
+        for (int i = 0; i < pathForRendering.size(); i++) {
+            BlockPos pos = pathForRendering.get(i);
+
+            float progress = i / (float) (pathForRendering.size() - 1);
+
+            GL11.glColor4f(progress, 1.0F - progress, 0.0F, 0.7F);
+
+            GL11.glVertex3d(
+                    pos.getX() + 0.5 - renderX,
+                    pos.getY() + 0.5 - renderY,
+                    pos.getZ() + 0.5 - renderZ);
+        }
+
+        GL11.glEnd();
+
+        if (targetPos != null) {
+            GL11.glBegin(GL11.GL_LINES);
+            GL11.glColor4f(1.0F, 1.0F, 1.0F, 0.7F);
+
+            double x = targetPos.getX() + 0.5 - renderX;
+            double y = targetPos.getY() + 0.5 - renderY;
+            double z = targetPos.getZ() + 0.5 - renderZ;
+            double size = 0.5;
+
+            GL11.glVertex3d(x - size, y - size, z - size);
+            GL11.glVertex3d(x + size, y - size, z - size);
+
+            GL11.glVertex3d(x + size, y - size, z - size);
+            GL11.glVertex3d(x + size, y - size, z + size);
+
+            GL11.glVertex3d(x + size, y - size, z + size);
+            GL11.glVertex3d(x - size, y - size, z + size);
+
+            GL11.glVertex3d(x - size, y - size, z + size);
+            GL11.glVertex3d(x - size, y - size, z - size);
+
+            // Top square
+            GL11.glVertex3d(x - size, y + size, z - size);
+            GL11.glVertex3d(x + size, y + size, z - size);
+
+            GL11.glVertex3d(x + size, y + size, z - size);
+            GL11.glVertex3d(x + size, y + size, z + size);
+
+            GL11.glVertex3d(x + size, y + size, z + size);
+            GL11.glVertex3d(x - size, y + size, z + size);
+
+            GL11.glVertex3d(x - size, y + size, z + size);
+            GL11.glVertex3d(x - size, y + size, z - size);
+
+            GL11.glVertex3d(x - size, y - size, z - size);
+            GL11.glVertex3d(x - size, y + size, z - size);
+
+            GL11.glVertex3d(x + size, y - size, z - size);
+            GL11.glVertex3d(x + size, y + size, z - size);
+
+            GL11.glVertex3d(x + size, y - size, z + size);
+            GL11.glVertex3d(x + size, y + size, z + size);
+
+            GL11.glVertex3d(x - size, y - size, z + size);
+            GL11.glVertex3d(x - size, y + size, z + size);
+
+            GL11.glEnd();
+        }
+        GL11.glEnable(GL11.GL_LIGHTING);
+        GL11.glEnable(GL11.GL_DEPTH_TEST);
+        GL11.glEnable(GL11.GL_TEXTURE_2D);
+        GL11.glDisable(GL11.GL_BLEND);
+        GL11.glPopMatrix();
     }
 
-    public static boolean isMoving() {
-        return isMoving;
-    }
-
+    // Inner class for A* pathfinding
     private static class PathNode {
         BlockPos pos;
         PathNode parent;
-        double gCost = Double.MAX_VALUE; // Cost from start to this node
-        double hCost = 0; // Heuristic cost from this node to goal
-        double fCost = Double.MAX_VALUE; // Total cost (g + h)
+        double gCost = Double.MAX_VALUE;
+        double hCost = 0;
+        double fCost = Double.MAX_VALUE;
 
         PathNode(BlockPos pos) {
             this.pos = pos;
@@ -992,10 +1269,52 @@ public class RobotUtil {
             return pos.hashCode();
         }
     }
+    private static void resetKeys() {
+        isForwardKeyPressed = false;
+        isBackKeyPressed = false;
+        isLeftKeyPressed = false;
+        isRightKeyPressed = false;
+        isJumpKeyPressed = false;
+        isSneakKeyPressed = false;
+        isSprintKeyPressed = false;
+    }
 
-    private static class TerrainInfo {
-        boolean canStandAt = false;
-        boolean isJumpable = false;
-        boolean isWater = false;
+    private static void applyKeyMovement() {
+        KeyBinding.setKeyBindState(mc.gameSettings.keyBindForward.getKeyCode(), isForwardKeyPressed);
+        KeyBinding.setKeyBindState(mc.gameSettings.keyBindBack.getKeyCode(), isBackKeyPressed);
+        KeyBinding.setKeyBindState(mc.gameSettings.keyBindLeft.getKeyCode(), isLeftKeyPressed);
+        KeyBinding.setKeyBindState(mc.gameSettings.keyBindRight.getKeyCode(), isRightKeyPressed);
+        KeyBinding.setKeyBindState(mc.gameSettings.keyBindJump.getKeyCode(), isJumpKeyPressed);
+        KeyBinding.setKeyBindState(mc.gameSettings.keyBindSneak.getKeyCode(), isSneakKeyPressed);
+        KeyBinding.setKeyBindState(mc.gameSettings.keyBindSprint.getKeyCode(), isSprintKeyPressed);
+        isMoving = isForwardKeyPressed || isBackKeyPressed || isLeftKeyPressed || isRightKeyPressed;
+    }
+    public static String getDebugInfo() {
+        StringBuilder info = new StringBuilder();
+        info.append("§6RobotUtil Status:§r\n");
+        info.append("§7Movement Style: §r").append(getMovementStyleName()).append("\n");
+        info.append("§7Path Length: §r").append(currentPath.size()).append("\n");
+
+        if (targetPos != null) {
+            info.append("§7Target: §r").append(targetPos.getX()).append(", ")
+                    .append(targetPos.getY()).append(", ")
+                    .append(targetPos.getZ()).append("\n");
+            info.append("§7Distance: §r").append(String.format("%.2f", getDistanceToPos(targetPos))).append("\n");
+        }
+
+        info.append("§7Stuck Counter: §r").append(stuckCounter).append("\n");
+        info.append("§7Stuck Positions: §r").append(stuckPositions.size()).append("\n");
+
+        return info.toString();
+    }
+
+    private static String getMovementStyleName() {
+        switch (movementStyle) {
+            case 0: return "Natural";
+            case 1: return "Careful";
+            case 2: return "Fast";
+            case 3: return "Parkour";
+            default: return "Unknown";
+        }
     }
 }

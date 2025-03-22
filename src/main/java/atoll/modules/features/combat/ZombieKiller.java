@@ -164,7 +164,7 @@ public class ZombieKiller extends Module {
             }
 
             // Check if we're stuck
-            if (isNavigating && !RobotUtil.isMoving()) {
+            if (isNavigating) {
                 stuckCounter++;
                 if (stuckCounter > 100) { // 5 seconds of being stuck
                     if (showMessages.getValue()) {
