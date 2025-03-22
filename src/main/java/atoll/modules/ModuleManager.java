@@ -23,7 +23,12 @@ public class ModuleManager {
     public void initializeModules() {
         // Register modules
         registerModule(new Robots());
+
+        //fish
         registerModule(new AutoFish());
+        registerModule(new KillFish());
+
+        //123
         registerModule(new ZombieKiller());
         registerModule(new EnderNodeESP());
         registerModule(new InvHud());

@@ -573,32 +573,23 @@ public class RobotUtil {
     }
 
     private static void addNaturalMovementVariations() {
-        // Skip variations if we're stuck or in water
         if (stuckCounter > 0 || mc.thePlayer.isInWater()) return;
 
-        // Add slight movement variations based on movement style
         if (isForwardKeyPressed && mc.thePlayer.onGround) {
-            // Update variation every second or so
             if (mc.thePlayer.ticksExisted % 20 == 0) {
                 lastMovementVariation = (float)(Math.random() * 0.2 - 0.1);
             }
-
-            // Apply the variation
             if (lastMovementVariation > 0) {
                 isRightKeyPressed = true;
             } else if (lastMovementVariation < 0) {
                 isLeftKeyPressed = true;
             }
-
-            // Occasionally jump while running for natural movement
             if (isSprintKeyPressed && Math.random() < 0.002 && mc.thePlayer.onGround &&
                     System.currentTimeMillis() - lastJumpTime > 2000) {
                 isJumpKeyPressed = true;
                 lastJumpTime = System.currentTimeMillis();
             }
         }
-
-        // Occasionally toggle sprint for natural speed variations
         if (isForwardKeyPressed && Math.random() < 0.01 && isClearAhead() && movementStyle != 1) {
             isSprintKeyPressed = !isSprintKeyPressed;
         }
@@ -610,8 +601,6 @@ public class RobotUtil {
         double z = Math.cos(Math.toRadians(yaw));
 
         BlockPos playerPos = new BlockPos(mc.thePlayer.posX, mc.thePlayer.posY, mc.thePlayer.posZ);
-
-        // Check a few blocks ahead
         for (int i = 1; i <= 3; i++) {
             BlockPos pos = new BlockPos(
                     playerPos.getX() + x * i,
@@ -619,13 +608,9 @@ public class RobotUtil {
                     playerPos.getZ() + z * i);
 
             BlockPos posUp = pos.up();
-
-            // If there's a block in the way, the path is not clear
             if (!isAirBlock(pos) || !isAirBlock(posUp)) {
                 return false;
             }
-
-            // If there's no block below, there might be a drop
             if (i == 1 && isAirBlock(pos.down())) {
                 return false;
             }
@@ -644,8 +629,6 @@ public class RobotUtil {
                 playerPos.getX() + x,
                 playerPos.getY() - 1,
                 playerPos.getZ() + z);
-
-        // If there's no block below the position ahead, it's an edge
         return isAirBlock(ahead);
     }
 
@@ -672,11 +655,9 @@ public class RobotUtil {
     }
 
     private static void handleCombat() {
-        // Find nearest hostile mob
         EntityLivingBase target = findNearestHostileMob();
 
         if (target != null && mc.thePlayer.getDistanceToEntity(target) <= ATTACK_RANGE) {
-            // Calculate rotation to face the target
             double dx = target.posX - mc.thePlayer.posX;
             double dz = target.posZ - mc.thePlayer.posZ;
             double dy = target.posY + target.getEyeHeight() - (mc.thePlayer.posY + mc.thePlayer.getEyeHeight());
@@ -684,23 +665,16 @@ public class RobotUtil {
             double dist = Math.sqrt(dx * dx + dz * dz);
             float yaw = (float) Math.toDegrees(Math.atan2(dz, dx)) - 90F;
             float pitch = (float) -Math.toDegrees(Math.atan2(dy, dist));
-
-            // Set target rotation for smooth camera movement
             targetYaw = yaw;
             targetPitch = pitch;
-
-            // Attack if facing the target
             float yawDiff = MathHelper.wrapAngleTo180_float(yaw - mc.thePlayer.rotationYaw);
             float pitchDiff = MathHelper.wrapAngleTo180_float(pitch - mc.thePlayer.rotationPitch);
 
             if (Math.abs(yawDiff) < 30F && Math.abs(pitchDiff) < 30F) {
-                // Add randomness to attack timing for more natural behavior
                 if (mc.thePlayer.ticksExisted % (3 + ThreadLocalRandom.current().nextInt(5)) == 0) {
                     mc.playerController.attackEntity(mc.thePlayer, target);
                     mc.thePlayer.swingItem();
                 }
-
-                // Occasionally strafe around target
                 if (Math.random() < 0.1) {
                     if (Math.random() < 0.5) {
                         isLeftKeyPressed = true;
@@ -708,13 +682,9 @@ public class RobotUtil {
                         isRightKeyPressed = true;
                     }
                 }
-
-                // Occasionally move back from target
                 if (mc.thePlayer.getDistanceToEntity(target) < 2.0 && Math.random() < 0.2) {
                     isBackKeyPressed = true;
                 }
-
-                // Occasionally jump during combat
                 if (Math.random() < 0.05 && mc.thePlayer.onGround) {
                     isJumpKeyPressed = true;
                 }
@@ -729,7 +699,7 @@ public class RobotUtil {
         for (Entity entity : mc.theWorld.loadedEntityList) {
             if (entity instanceof EntityMob && entity.isEntityAlive()) {
                 double distance = mc.thePlayer.getDistanceToEntity(entity);
-                if (distance < closestDistance && distance <= 10.0) { // Only consider mobs within 10 blocks
+                if (distance < closestDistance && distance <= 10.0) {
                     closestDistance = distance;
                     closestEntity = (EntityLivingBase) entity;
                 }
@@ -741,7 +711,6 @@ public class RobotUtil {
 
     public static void interactWithNPC(Entity npc) {
         if (npc != null && mc.thePlayer.getDistanceToEntity(npc) <= INTERACTION_RANGE) {
-            // Look at NPC first
             double dx = npc.posX - mc.thePlayer.posX;
             double dz = npc.posZ - mc.thePlayer.posZ;
             double dy = npc.posY + npc.getEyeHeight() - (mc.thePlayer.posY + mc.thePlayer.getEyeHeight());
@@ -749,8 +718,6 @@ public class RobotUtil {
             double dist = Math.sqrt(dx * dx + dz * dz);
             targetYaw = (float) Math.toDegrees(Math.atan2(dz, dx)) - 90F;
             targetPitch = (float) -Math.toDegrees(Math.atan2(dy, dist));
-
-            // Wait a bit for camera to adjust before interacting
             if (Math.abs(MathHelper.wrapAngleTo180_float(targetYaw - mc.thePlayer.rotationYaw)) < 15F) {
                 mc.playerController.interactWithEntitySendPacket(mc.thePlayer, npc);
             }
@@ -765,8 +732,6 @@ public class RobotUtil {
 
         double distMoved = mc.thePlayer.getDistance(lastPosition.xCoord, lastPosition.yCoord, lastPosition.zCoord);
         Vec3 currentPos = new Vec3(mc.thePlayer.posX, mc.thePlayer.posY, mc.thePlayer.posZ);
-
-        // Check if we're in a position we've been stuck in before
         BlockPos currentBlock = new BlockPos(mc.thePlayer.posX, mc.thePlayer.posY, mc.thePlayer.posZ);
         boolean inKnownStuckPosition = stuckPositions.contains(currentBlock);
 
@@ -774,19 +739,13 @@ public class RobotUtil {
 
         if (distMoved < 0.05 && isMoving) {
             stuckCounter++;
-
-            // Consider stuck after not moving for a while
             boolean isStuck = stuckCounter > 40 || inKnownStuckPosition;
-
             if (isStuck) {
-                // Record this position as a stuck position
                 stuckPositions.add(currentBlock);
                 lastStuckTime = System.currentTimeMillis();
             }
-
             return isStuck;
         } else {
-            // Gradually reduce stuck counter when moving
             stuckCounter = Math.max(0, stuckCounter - 1);
             return false;
         }
@@ -794,13 +753,9 @@ public class RobotUtil {
 
     private static void handleStuckSituation() {
         consecutiveStuckCount++;
-
-        // Try different strategies based on how long we've been stuck
         if (consecutiveStuckCount == 1) {
-            // First try: just jump
             isJumpKeyPressed = true;
         } else if (consecutiveStuckCount == 2) {
-            // Second try: jump and move in a random direction
             isJumpKeyPressed = true;
             int random = ThreadLocalRandom.current().nextInt(4);
             switch (random) {
@@ -810,21 +765,14 @@ public class RobotUtil {
                 case 3: isRightKeyPressed = true; break;
             }
         } else if (consecutiveStuckCount == 3) {
-            // Third try: try to break blocks if we're stuck
             isJumpKeyPressed = true;
-            // Look down slightly to break blocks below
             targetPitch = 30f;
-
-            // Simulate breaking blocks by right-clicking
             if (mc.thePlayer.ticksExisted % 5 == 0) {
                 mc.playerController.sendUseItem(mc.thePlayer, mc.theWorld, mc.thePlayer.inventory.getCurrentItem());
             }
         } else if (consecutiveStuckCount >= 4) {
-            // Fourth try: clear the path and calculate a new one
             currentPath.clear();
             pathForRendering.clear();
-
-            // Try to find a completely different path by temporarily marking this area as dangerous
             BlockPos playerPos = new BlockPos(mc.thePlayer.posX, mc.thePlayer.posY, mc.thePlayer.posZ);
             for (int x = -2; x <= 2; x++) {
                 for (int y = -1; y <= 1; y++) {
@@ -846,23 +794,12 @@ public class RobotUtil {
     }
 
     private static List<BlockPos> findPath(BlockPos start, BlockPos goal) {
-        // Maximum iterations to prevent infinite loops
         final int MAX_ITERATIONS = 3000;
-
-        // If start and goal are the same, return empty path
         if (start.equals(goal)) return new ArrayList<>();
-
-        // Open set - nodes to be evaluated
         PriorityQueue<PathNode> openSet = new PriorityQueue<>(
                 Comparator.comparingDouble(node -> node.fCost));
-
-        // Closed set - nodes already evaluated
         Set<BlockPos> closedSet = new HashSet<>();
-
-        // Map to track best path to each node
         Map<BlockPos, PathNode> allNodes = new HashMap<>();
-
-        // Initialize start node
         PathNode startNode = new PathNode(start);
         startNode.gCost = 0;
         startNode.hCost = getHeuristicCost(start, goal);
@@ -875,11 +812,7 @@ public class RobotUtil {
 
         while (!openSet.isEmpty() && iterations < MAX_ITERATIONS) {
             iterations++;
-
-            // Get node with lowest fCost
             PathNode current = openSet.poll();
-
-            // If we reached the goal, reconstruct and return the path
             if (current.pos.equals(goal) || getDistanceBetween(current.pos, goal) < 2.0) {
                 List<BlockPos> path = reconstructPath(current);
                 if (path.size() > MAX_PATH_LENGTH) {
@@ -890,39 +823,29 @@ public class RobotUtil {
 
             closedSet.add(current.pos);
 
-            // Check all neighbors
             for (BlockPos neighborPos : getNeighbors(current.pos)) {
-                // Skip if already evaluated
                 if (closedSet.contains(neighborPos)) continue;
 
-                // Calculate cost to this neighbor
                 double moveCost = getMoveCost(current.pos, neighborPos);
                 double tentativeGCost = current.gCost + moveCost;
 
-                // Get or create neighbor node
                 PathNode neighbor = allNodes.getOrDefault(neighborPos, new PathNode(neighborPos));
                 allNodes.put(neighborPos, neighbor);
 
-                // If this path is better than any previous one
                 if (tentativeGCost < neighbor.gCost) {
                     neighbor.parent = current;
                     neighbor.gCost = tentativeGCost;
                     neighbor.hCost = getHeuristicCost(neighborPos, goal);
                     neighbor.fCost = neighbor.gCost + neighbor.hCost;
-
-                    // Add to open set if not already there
                     if (!openSet.contains(neighbor)) {
                         openSet.add(neighbor);
                     } else {
-                        // Update position in queue
                         openSet.remove(neighbor);
                         openSet.add(neighbor);
                     }
                 }
             }
         }
-
-        // If no path found, try to find a path to a position near the goal
         if (getDistanceBetween(start, goal) > 10.0) {
             List<BlockPos> nearGoals = new ArrayList<>();
             for (int x = -5; x <= 5; x++) {
@@ -935,22 +858,16 @@ public class RobotUtil {
                     }
                 }
             }
-
-            // Sort by distance to original goal
             nearGoals.sort(Comparator.comparingDouble(pos -> getDistanceBetween(pos, goal)));
 
-            // Try to find path to nearest valid position
             for (BlockPos nearGoal : nearGoals) {
                 List<BlockPos> path = findPath(start, nearGoal);
                 if (!path.isEmpty()) {
-                    // Add the original goal at the end
                     path.add(goal);
                     return path;
                 }
             }
         }
-
-        // If still no path found, create a simple direct path
         return createDirectPath(start, goal);
     }
 

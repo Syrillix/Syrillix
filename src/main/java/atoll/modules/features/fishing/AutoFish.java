@@ -1,5 +1,6 @@
 package atoll.modules.features.fishing;
 
+import atoll.Main;
 import atoll.gui.Category;
 import atoll.gui.setting.Setting;
 import atoll.modules.Module;
@@ -18,6 +19,8 @@ import net.minecraftforge.client.event.RenderGameOverlayEvent;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.TickEvent;
 import org.lwjgl.input.Keyboard;
+
+import atoll.modules.ModuleManager;
 
 import java.util.Random;
 
@@ -608,6 +611,13 @@ private void lookAtWater() {
             if (showMessages.getValue()) {
                 mc.thePlayer.addChatMessage(
                         new ChatComponentText("§b[Atoll] §fRetrieving fishing rod!"));
+            }
+
+            // Notify KillFish module that a fish was caught
+            ModuleManager moduleManager = Main.getInstance().getModuleManager();
+            KillFish killFishModule = (KillFish) moduleManager.getModuleByName("killfish");
+            if (killFishModule != null && killFishModule.isEnabled()) {
+                killFishModule.onFishCaught();
             }
         }
     }
