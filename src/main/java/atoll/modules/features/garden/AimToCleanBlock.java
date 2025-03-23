@@ -3,6 +3,7 @@ package atoll.modules.features.garden;
 import atoll.gui.Category;
 import atoll.gui.setting.Setting;
 import atoll.modules.Module;
+import atoll.util.Utils;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockDoublePlant;
 import net.minecraft.block.BlockLeaves;
@@ -28,8 +29,6 @@ import java.util.List;
 import java.util.Random;
 
 public class AimToCleanBlock extends Module {
-
-    private final Minecraft mc = Minecraft.getMinecraft();
     private final Random random = new Random();
 
     // Block position with color data for rendering
@@ -133,7 +132,7 @@ public class AimToCleanBlock extends Module {
 
     @SubscribeEvent
     public void onTick(TickEvent.ClientTickEvent event) {
-        if (!this.isEnabled() || mc.thePlayer == null || mc.theWorld == null) return;
+        if (!this.isEnabled() || !Utils.canUpdate()) return;
 
         // Only process on client tick end to avoid multiple calls per tick
         if (event.phase != TickEvent.Phase.END) return;
@@ -254,7 +253,7 @@ public class AimToCleanBlock extends Module {
             }
         }
 
-        if (debug.getValue() && targetBlocks.size() > 0) {
+        if (debug.getValue() && !targetBlocks.isEmpty()) {
             debugMessage("Found " + targetBlocks.size() + " valid target blocks");
         }
     }

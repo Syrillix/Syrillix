@@ -3,6 +3,7 @@ package atoll.modules.features.combat;
 import atoll.gui.Category;
 import atoll.gui.setting.Setting;
 import atoll.modules.Module;
+import atoll.util.Utils;
 import atoll.util.robotUtil.RobotUtil;
 import net.minecraft.client.Minecraft;
 import net.minecraft.entity.Entity;
@@ -54,8 +55,8 @@ public class ZombieKiller extends Module {
 
     @Override
     public void onEnable() {
-        if (showMessages.getValue() && Minecraft.getMinecraft().thePlayer != null) {
-            Minecraft.getMinecraft().thePlayer.addChatMessage(
+        if (showMessages.getValue() && mc.thePlayer != null) {
+            mc.thePlayer.addChatMessage(
                     new ChatComponentText("§b[Atoll] §a" + getName() + " §fenabled!"));
         }
 
@@ -73,7 +74,7 @@ public class ZombieKiller extends Module {
     @Override
     public void onDisable() {
         if (showMessages.getValue() && Minecraft.getMinecraft().thePlayer != null) {
-            Minecraft.getMinecraft().thePlayer.addChatMessage(
+            mc.thePlayer.addChatMessage(
                     new ChatComponentText("§b[Atoll] §c" + getName() + " §fdisabled!"));
         }
 
@@ -90,7 +91,7 @@ public class ZombieKiller extends Module {
         if (!this.isEnabled()) return;
 
         // Check if the player exists
-        if (Minecraft.getMinecraft().thePlayer == null || Minecraft.getMinecraft().theWorld == null) return;
+        if (!Utils.canUpdate()) return;
 
         // Update parkour mode setting
         RobotUtil.setParkourMode(enableParkour.getValue());
@@ -102,9 +103,9 @@ public class ZombieKiller extends Module {
 
         // Check if current target is still valid
         if (currentTarget != null && (!currentTarget.isEntityAlive() ||
-                currentTarget.getDistanceToEntity(Minecraft.getMinecraft().thePlayer) > searchRadius.getValue())) {
+                currentTarget.getDistanceToEntity(mc.thePlayer) > searchRadius.getValue())) {
             if (showMessages.getValue()) {
-                Minecraft.getMinecraft().thePlayer.addChatMessage(
+                mc.thePlayer.addChatMessage(
                         new ChatComponentText("§b[Atoll] §fTarget lost, searching for new zombie..."));
             }
             currentTarget = null;
@@ -120,7 +121,7 @@ public class ZombieKiller extends Module {
 
         // Navigate to target if we have one
         if (currentTarget != null) {
-            double distanceToTarget = Minecraft.getMinecraft().thePlayer.getDistanceToEntity(currentTarget);
+            double distanceToTarget = mc.thePlayer.getDistanceToEntity(currentTarget);
 
             // If we're close enough to attack, stop moving and let RobotUtil handle the combat
             if (distanceToTarget <= attackRange.getValue()) {
@@ -128,7 +129,7 @@ public class ZombieKiller extends Module {
                     RobotUtil.stopMovement();
                     isNavigating = false;
                     if (showMessages.getValue()) {
-                        Minecraft.getMinecraft().thePlayer.addChatMessage(
+                        mc.thePlayer.addChatMessage(
                                 new ChatComponentText("§b[Atoll] §fIn attack range, engaging zombie!"));
                     }
                 }
@@ -187,30 +188,30 @@ public class ZombieKiller extends Module {
     }
 
     private void findNewTarget() {
-        List<EntityZombie> zombies = Minecraft.getMinecraft().theWorld.loadedEntityList.stream()
+        List<EntityZombie> zombies = mc.theWorld.loadedEntityList.stream()
                 .filter(entity -> entity instanceof EntityZombie)
                 .map(entity -> (EntityZombie) entity)
                 .filter(Entity::isEntityAlive)
-                .filter(zombie -> zombie.getDistanceToEntity(Minecraft.getMinecraft().thePlayer) <= searchRadius.getValue())
+                .filter(zombie -> zombie.getDistanceToEntity(mc.thePlayer) <= searchRadius.getValue())
                 .collect(Collectors.toList());
 
         if (!zombies.isEmpty()) {
             if (targetClosest.getValue()) {
                 // Sort by distance
                 zombies.sort(Comparator.comparingDouble(
-                        zombie -> zombie.getDistanceToEntity(Minecraft.getMinecraft().thePlayer)));
+                        zombie -> zombie.getDistanceToEntity(mc.thePlayer)));
             }
 
             currentTarget = zombies.get(0);
 
             if (showMessages.getValue()) {
-                Minecraft.getMinecraft().thePlayer.addChatMessage(
+                mc.thePlayer.addChatMessage(
                         new ChatComponentText("§b[Atoll] §fFound zombie target at distance: " +
-                                String.format("%.2f", currentTarget.getDistanceToEntity(Minecraft.getMinecraft().thePlayer))));
+                                String.format("%.2f", currentTarget.getDistanceToEntity(mc.thePlayer))));
             }
         } else if (showMessages.getValue() && Minecraft.getMinecraft().thePlayer.ticksExisted % 100 == 0) {
             // Only show this message occasionally to avoid spam
-            Minecraft.getMinecraft().thePlayer.addChatMessage(
+            mc.thePlayer.addChatMessage(
                     new ChatComponentText("§b[Atoll] §fNo zombies found within " + searchRadius.getValue() + " blocks."));
         }
     }

@@ -4,6 +4,7 @@ import atoll.Main;
 import atoll.gui.Category;
 import atoll.gui.setting.Setting;
 import atoll.modules.Module;
+import atoll.util.Utils;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiChat;
 import net.minecraft.client.gui.ScaledResolution;
@@ -54,23 +55,23 @@ public class InvHud extends Module {
 
     @Override
     public void onEnable() {
-        if (showText.getValue() && Minecraft.getMinecraft().thePlayer != null) {
-            Minecraft.getMinecraft().thePlayer.addChatMessage(
+        if (showText.getValue() && Utils.canUpdate()) {
+            mc.thePlayer.addChatMessage(
                     new ChatComponentText("§b[Atoll] §a" + getName() + " §fenabled!"));
         }
     }
 
     @Override
     public void onDisable() {
-        if (showText.getValue() && Minecraft.getMinecraft().thePlayer != null) {
-            Minecraft.getMinecraft().thePlayer.addChatMessage(
+        if (showText.getValue() && Utils.canUpdate()) {
+            mc.thePlayer.addChatMessage(
                     new ChatComponentText("§b[Atoll] §c" + getName() + " §fdisabled!"));
         }
     }
 
     @SubscribeEvent
     public void onRenderGameOverlay(RenderGameOverlayEvent.Post event) {
-        if (!this.isEnabled() || Minecraft.getMinecraft().thePlayer == null) return;
+        if (!this.isEnabled() || mc.thePlayer == null) return;
 
         if (event.type == RenderGameOverlayEvent.ElementType.HOTBAR) {
             // Handle dragging
@@ -82,7 +83,6 @@ public class InvHud extends Module {
     }
 
     private void handleDragging() {
-        Minecraft mc = Minecraft.getMinecraft();
         ScaledResolution scaledResolution = new ScaledResolution(mc);
 
         // Only allow dragging when chat is open
@@ -121,7 +121,6 @@ public class InvHud extends Module {
     }
 
     private void renderInventoryHUD() {
-        Minecraft mc = Minecraft.getMinecraft();
         ScaledResolution scaledResolution = new ScaledResolution(mc);
 
         float scaleFactor = scale.getValue();

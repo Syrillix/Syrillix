@@ -4,6 +4,7 @@ import atoll.Main;
 import atoll.gui.Category;
 import atoll.gui.setting.Setting;
 import atoll.modules.Module;
+import atoll.util.Utils;
 import net.minecraft.client.Minecraft;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.projectile.EntityFishHook;
@@ -25,8 +26,6 @@ import atoll.modules.ModuleManager;
 import java.util.Random;
 
 public class AutoFish extends Module {
-
-    private final Minecraft mc = Minecraft.getMinecraft();
     private final Random random = new Random();
 
     // Settings
@@ -94,7 +93,7 @@ public class AutoFish extends Module {
 
     @Override
     public void onEnable() {
-        if (showMessages.getValue() && mc.thePlayer != null) {
+        if (showMessages.getValue() && Utils.canUpdate()) {
             mc.thePlayer.addChatMessage(
                     new ChatComponentText("§b[Atoll] §a" + getName() + " §fenabled!"));
         }
@@ -114,7 +113,7 @@ public class AutoFish extends Module {
 
     @Override
     public void onDisable() {
-        if (showMessages.getValue() && mc.thePlayer != null) {
+        if (showMessages.getValue() && Utils.canUpdate()) {
             mc.thePlayer.addChatMessage(
                     new ChatComponentText("§b[Atoll] §c" + getName() + " §fdisabled!"));
         }
@@ -126,7 +125,7 @@ public class AutoFish extends Module {
 
     @SubscribeEvent
     public void onTick(TickEvent.ClientTickEvent event) {
-        if (!this.isEnabled() || mc.thePlayer == null || mc.theWorld == null) return;
+        if (!this.isEnabled() || !Utils.canUpdate()) return;
 
         // Only process on client tick end to avoid multiple calls per tick
         if (event.phase != TickEvent.Phase.END) return;

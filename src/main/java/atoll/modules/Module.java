@@ -2,6 +2,7 @@ package atoll.modules;
 
 import atoll.gui.Category;
 import atoll.gui.setting.Setting;
+import net.minecraft.client.Minecraft;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -12,6 +13,7 @@ public abstract class Module {
     private boolean enabled;
     private final Category category;
     private final List<Setting> settings = new ArrayList<>();
+    public final Minecraft mc = Minecraft.getMinecraft();
 
     public Module(String name, int keyBind, Category.CategoryType categoryType) {
         this.name = name;

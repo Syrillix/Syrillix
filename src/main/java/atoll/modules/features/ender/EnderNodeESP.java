@@ -4,6 +4,7 @@ import atoll.Main;
 import atoll.gui.Category;
 import atoll.gui.setting.Setting;
 import atoll.modules.Module;
+import atoll.util.Utils;
 import net.minecraft.block.Block;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.GlStateManager;
@@ -76,8 +77,8 @@ public class EnderNodeESP extends Module {
 
     @Override
     public void onDisable() {
-        if (showText.getValue() && Minecraft.getMinecraft().thePlayer != null) {
-            Minecraft.getMinecraft().thePlayer.addChatMessage(
+        if (showText.getValue() && Utils.canUpdate()) {
+            mc.thePlayer.addChatMessage(
                     new ChatComponentText("§b[Atoll] §c" + getName() + " §fdisabled!"));
         }
 
@@ -119,7 +120,7 @@ public class EnderNodeESP extends Module {
     private void scanForEnderNodes() {
         try {
             Minecraft mc = Minecraft.getMinecraft();
-            if (mc == null || mc.thePlayer == null || mc.theWorld == null) return;
+            if (mc == null || !Utils.canUpdate()) return;
 
             // Get player position
             BlockPos playerPos = mc.thePlayer.getPosition();
@@ -164,7 +165,7 @@ public class EnderNodeESP extends Module {
 
     @SubscribeEvent
     public void onRenderWorldLast(RenderWorldLastEvent event) {
-        if (!this.isEnabled() || Minecraft.getMinecraft().thePlayer == null || enderNodes.isEmpty()) return;
+        if (!this.isEnabled() || !Utils.canUpdate() || enderNodes.isEmpty()) return;
 
         // Setup GL for rendering
         GlStateManager.pushMatrix();

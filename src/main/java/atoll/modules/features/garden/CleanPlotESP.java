@@ -3,6 +3,7 @@ package atoll.modules.features.garden;
 import atoll.gui.Category;
 import atoll.gui.setting.Setting;
 import atoll.modules.Module;
+import atoll.util.Utils;
 import net.minecraft.block.Block;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.GlStateManager;
@@ -91,8 +92,8 @@ public class CleanPlotESP extends Module {
 
     @Override
     public void onEnable() {
-        if (showText.getValue() && Minecraft.getMinecraft().thePlayer != null) {
-            Minecraft.getMinecraft().thePlayer.addChatMessage(
+        if (showText.getValue() && Utils.canUpdate()) {
+            mc.thePlayer.addChatMessage(
                     new ChatComponentText("§b[Atoll] §a" + getName() + " §fenabled!"));
         }
 
@@ -102,8 +103,8 @@ public class CleanPlotESP extends Module {
 
     @Override
     public void onDisable() {
-        if (showText.getValue() && Minecraft.getMinecraft().thePlayer != null) {
-            Minecraft.getMinecraft().thePlayer.addChatMessage(
+        if (showText.getValue() && Utils.canUpdate()) {
+            mc.thePlayer.addChatMessage(
                     new ChatComponentText("§b[Atoll] §c" + getName() + " §fdisabled!"));
         }
 
@@ -144,8 +145,7 @@ public class CleanPlotESP extends Module {
 
     private void scanForGardenBlocks() {
         try {
-            Minecraft mc = Minecraft.getMinecraft();
-            if (mc == null || mc.thePlayer == null || mc.theWorld == null) return;
+            if (mc == null || !Utils.canUpdate()) return;
 
             // Get player position
             BlockPos playerPos = mc.thePlayer.getPosition();
