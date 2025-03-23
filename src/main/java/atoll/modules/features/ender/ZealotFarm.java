@@ -505,51 +505,5 @@ public class ZealotFarm extends Module {
     /**
      * Checks if the player can see the target entity
      */
-    private boolean canSeeEntity(Entity entity) {
-        return mc.thePlayer != null && entity != null && mc.thePlayer.canEntityBeSeen(entity);
-    }
 
-    /**
-     * Calculates the distance to an entity
-     */
-    private double getDistanceToEntity(Entity entity) {
-        return mc.thePlayer != null && entity != null ? mc.thePlayer.getDistanceToEntity(entity) : Double.MAX_VALUE;
-    }
-
-    /**
-     * Checks if an entity is within the player's field of view
-     */
-    private boolean isInFieldOfView(Entity entity) {
-        if (mc.thePlayer == null || entity == null) return false;
-
-        double deltaX = entity.posX - mc.thePlayer.posX;
-        double deltaZ = entity.posZ - mc.thePlayer.posZ;
-
-        // Calculate the angle between player's look vector and entity position
-        double angle = Math.toDegrees(Math.atan2(deltaZ, deltaX)) - 90.0;
-        angle = MathHelper.wrapAngleTo180_double(angle - mc.thePlayer.rotationYaw);
-
-        // Consider entity in field of view if angle is within ±60 degrees
-        return Math.abs(angle) <= 60.0;
-    }
-
-    /**
-     * Checks if the player is currently looking at an entity's hitbox
-     */
-    private boolean isLookingAtEntityHitbox(Entity entity) {
-        if (entity == null || mc.thePlayer == null) return false;
-
-        // Get the entity the player is currently looking at
-        Entity pointedEntity = mc.objectMouseOver != null && mc.objectMouseOver.entityHit != null
-                ? mc.objectMouseOver.entityHit : null;
-
-        return entity.equals(pointedEntity);
-    }
-
-    /**
-     * Checks if the player is holding a weapon
-     */
-    private boolean isHoldingWeapon() {
-        return mc.thePlayer != null && mc.thePlayer.getCurrentEquippedItem() != null;
-    }
 }

@@ -4,6 +4,7 @@ import atoll.modules.features.combat.*;
 import atoll.modules.features.ender.*;
 import atoll.modules.features.garden.AimToCleanBlock;
 import atoll.modules.features.garden.CleanPlotESP;
+import atoll.modules.features.mining.AutoMithril;
 import atoll.modules.features.render.InvHud;
 import atoll.modules.features.test.*;
 import atoll.modules.features.fishing.*;
@@ -41,8 +42,11 @@ public class ModuleManager {
         registerModule(new CleanPlotESP());
         registerModule(new AimToCleanBlock());
 
-
+// render
         registerModule(new InvHud());
+
+        //mining
+        registerModule(new AutoMithril());
     }
 
     public void registerModule(Module module) {
