@@ -21,7 +21,8 @@ public class Category {
         END("EnderWorld"),
         RENDER("Render"),
         COMBAT("Combat"),
-        FISHING("Fishing");
+        FISHING("Fishing"),
+        MINING("Mining");
 
         private final String displayName;
 

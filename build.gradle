@@ -2,6 +2,10 @@ buildscript {
     repositories {
         maven { url = "https://files.minecraftforge.net/maven" }
         mavenCentral()
+        maven {
+            name = "sponge"
+            url = "https://repo.spongepowered.org/maven"
+        }
     }
     dependencies {
         classpath 'net.minecraftforge.gradle:ForgeGradle:2.1-SNAPSHOT'
@@ -21,11 +25,60 @@ minecraft {
     version = "1.8.9-11.15.1.2318-1.8.9"
     runDir = "run"
     mappings = "stable_20"
+
+    // For ForgeGradle 2.1, use this format for run arguments
+    makeObfSourceJar = false
+
+    // Adding run arguments for Mixin
+    clientRunArgs += "--tweakClass org.spongepowered.asm.launch.MixinTweaker"
+    clientRunArgs += "--mixin mixins.atoll.json"
+}
+
+repositories {
+    maven {
+        name = "SpongePowered"
+        url = "https://repo.spongepowered.org/maven"
+    }
+}
+
+configurations {
+    compile.extendsFrom annotationProcessor
+}
+
+dependencies {
+    compile 'org.spongepowered:mixin:0.7.11-SNAPSHOT'
+    annotationProcessor 'org.spongepowered:mixin:0.7.11-SNAPSHOT'
+}
+
+jar {
+    manifest {
+        attributes(
+                'MixinConfigs': 'mixins.atoll.json',
+                'TweakClass': 'org.spongepowered.asm.launch.MixinTweaker',
+                'FMLCorePluginContainsFMLMod': 'true',
+                'ForceLoadAsMod': 'true'
+        )
+    }
+}
+
+processResources {
+    inputs.property "version", project.version
+    inputs.property "mcversion", project.minecraft.version
+
+    from(sourceSets.main.resources.srcDirs) {
+        include 'mcmod.info'
+        expand 'version': project.version, 'mcversion': project.minecraft.version
+    }
+
+    from(sourceSets.main.resources.srcDirs) {
+        exclude 'mcmod.info'
+    }
 }
 
 compileJava {
     sourceCompatibility = '1.8'
     targetCompatibility = '1.8'
+    options.encoding = 'UTF-8'
 }
 
 reobf {

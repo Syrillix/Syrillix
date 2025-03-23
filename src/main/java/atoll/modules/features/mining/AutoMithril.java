@@ -30,7 +30,6 @@ public class AutoMithril extends Module {
     private final Minecraft mc = Minecraft.getMinecraft();
     private final Random random = new Random();
 
-    // Settings
     private Setting.BooleanSetting showMessages;
     private Setting.SliderSetting range;
     private Setting.SliderSetting minMiningDelay;
@@ -42,13 +41,11 @@ public class AutoMithril extends Module {
     private Setting.BooleanSetting mineLightBlueWool;
     private Setting.BooleanSetting debug;
 
-    // State variables
     private BlockPos targetBlock = null;
     private boolean isMining = false;
     private int miningCooldown = 0;
     private boolean isAimingAtTarget = false;
 
-    // Rotation variables
     private float targetYaw = 0f;
     private float targetPitch = 0f;
     private boolean isRotating = false;
@@ -57,14 +54,12 @@ public class AutoMithril extends Module {
     private float startYaw = 0f;
     private float startPitch = 0f;
 
-    // Block tracking
     private Map<BlockPos, Long> bedrockBlocks = new ConcurrentHashMap<>();
     private List<BlockPos> potentialBlocks = new CopyOnWriteArrayList<>();
 
     public AutoMithril() {
         super("AutoMithril", Keyboard.KEY_NONE, Category.CategoryType.MINING);
 
-        // Initialize settings
         this.showMessages = new Setting.BooleanSetting("Show Messages", true);
         this.range = new Setting.SliderSetting("Mining Range", 5, 2, 6, 1);
         this.minMiningDelay = new Setting.SliderSetting("Min Mining Delay", 150, 50, 500, 1);
@@ -76,7 +71,6 @@ public class AutoMithril extends Module {
         this.mineLightBlueWool = new Setting.BooleanSetting("Mine Light Blue Wool", true);
         this.debug = new Setting.BooleanSetting("Debug Mode", false);
 
-        // Register settings
         addSetting(showMessages);
         addSetting(range);
         addSetting(minMiningDelay);
@@ -112,29 +106,21 @@ public class AutoMithril extends Module {
     public void onTick(TickEvent.ClientTickEvent event) {
         if (!this.isEnabled() || mc.thePlayer == null || mc.theWorld == null) return;
 
-        // Only process on client tick end to avoid multiple calls per tick
         if (event.phase != TickEvent.Phase.END) return;
 
-        // Handle rotation to target
         if (isRotating) {
             updateRotation();
         }
 
-        // Update bedrock blocks (check if they've turned back to mithril)
         updateBedrockBlocks();
 
-        // If we're actively mining a target
         if (isMining && targetBlock != null) {
             handleActiveMining();
         } else {
-            // Not mining, find a new target
             findNewTarget();
         }
     }
 
-    /**
-     * Updates the list of bedrock blocks, removing ones that have changed back
-     */
     private void updateBedrockBlocks() {
         Iterator<Map.Entry<BlockPos, Long>> iterator = bedrockBlocks.entrySet().iterator();
         while (iterator.hasNext()) {
@@ -142,14 +128,11 @@ public class AutoMithril extends Module {
             BlockPos pos = entry.getKey();
             long timestamp = entry.getValue();
 
-            // Check if block has been bedrock for at least 3 seconds
             if (System.currentTimeMillis() - timestamp > 3000) {
-                // Check if the block is no longer bedrock
                 Block block = mc.theWorld.getBlockState(pos).getBlock();
                 if (block != Blocks.bedrock) {
                     iterator.remove();
 
-                    // If it's a mithril block again, add it to potential targets
                     if (isMithrilBlock(pos)) {
                         potentialBlocks.add(pos);
                         if (debug.getValue()) {
@@ -161,13 +144,8 @@ public class AutoMithril extends Module {
         }
     }
 
-    /**
-     * Handles ongoing mining of a target block
-     */
     private void handleActiveMining() {
-        // Check if target still exists and is valid
         if (targetBlock == null || !isMithrilBlock(targetBlock)) {
-            // Check if the block turned into bedrock
             Block block = mc.theWorld.getBlockState(targetBlock).getBlock();
             if (block == Blocks.bedrock) {
                 if (debug.getValue()) {
@@ -180,21 +158,16 @@ public class AutoMithril extends Module {
             return;
         }
 
-        // Always update aim at the target
         if (smoothRotation.getValue()) {
             lookAtBlock(targetBlock);
         } else {
             directLookAtBlock(targetBlock);
         }
 
-        // Only mine if we're properly aiming at the target
         if (isAimingAtTarget) {
-            // Mine if cooldown is ready
             if (miningCooldown <= 0) {
-                // Mine the block (left click)
                 mineBlock();
 
-                // Reset cooldown for next mining action
                 miningCooldown = (int) (minMiningDelay.getValue() +
                         random.nextInt((int) (maxMiningDelay.getValue() - minMiningDelay.getValue() + 1)));
 
@@ -205,20 +178,15 @@ public class AutoMithril extends Module {
                 miningCooldown--;
             }
         } else {
-            // We're still rotating to aim at the target
-            if (debug.getValue() && random.nextInt(20) == 0) { // Limit debug spam
+            if (debug.getValue() && random.nextInt(20) == 0) {
                 debugMessage("Still aiming at block...");
             }
         }
     }
 
-    /**
-     * Finds a new mithril block to mine
-     */
     private void findNewTarget() {
         if (mc.theWorld == null) return;
 
-        // First check our list of potential blocks that we've seen regenerate
         if (!potentialBlocks.isEmpty()) {
             Iterator<BlockPos> iterator = potentialBlocks.iterator();
             while (iterator.hasNext()) {
@@ -229,12 +197,11 @@ public class AutoMithril extends Module {
                     startMining();
                     return;
                 } else {
-                    iterator.remove(); // Remove invalid blocks
+                    iterator.remove();
                 }
             }
         }
 
-        // If no potential blocks, scan for new ones
         int range = (int) Math.ceil(this.range.getValue());
         BlockPos playerPos = mc.thePlayer.getPosition();
 
@@ -243,7 +210,6 @@ public class AutoMithril extends Module {
                 for (int z = -range; z <= range; z++) {
                     BlockPos pos = playerPos.add(x, y, z);
 
-                    // Skip if we're already tracking this as bedrock
                     if (bedrockBlocks.containsKey(pos)) continue;
 
                     if (isMithrilBlock(pos) && isInRange(pos) && canSeeBlock(pos)) {
@@ -256,9 +222,6 @@ public class AutoMithril extends Module {
         }
     }
 
-    /**
-     * Checks if a block is a mithril block we want to mine
-     */
     private boolean isMithrilBlock(BlockPos pos) {
         if (mc.theWorld == null) return false;
 
@@ -266,22 +229,18 @@ public class AutoMithril extends Module {
         Block block = state.getBlock();
         int metadata = block.getMetaFromState(state);
 
-        // Cyan Stained Clay (metadata 9)
         if (mineStainedClay.getValue() && block == Blocks.stained_hardened_clay && metadata == 9) {
             return true;
         }
 
-        // Cyan Wool (metadata 9)
         if (mineCyanWool.getValue() && block == Blocks.wool && metadata == 9) {
             return true;
         }
 
-        // Light Blue Wool (metadata 3)
         if (mineLightBlueWool.getValue() && block == Blocks.wool && metadata == 3) {
             return true;
         }
 
-        // Prismarine variants
         if (minePrismarine.getValue() && (
                 block == Blocks.prismarine)) {
             return true;
@@ -290,9 +249,6 @@ public class AutoMithril extends Module {
         return false;
     }
 
-    /**
-     * Checks if a block is within mining range
-     */
     private boolean isInRange(BlockPos pos) {
         double distSq = mc.thePlayer.getDistanceSq(
                 pos.getX() + 0.5,
@@ -301,20 +257,14 @@ public class AutoMithril extends Module {
         return distSq <= (range.getValue() * range.getValue());
     }
 
-    /**
-     * Checks if the player can see a block (not obstructed)
-     */
     private boolean canSeeBlock(BlockPos pos) {
-        // Get the center of the block
         Vec3 blockCenter = new Vec3(
                 pos.getX() + 0.5,
                 pos.getY() + 0.5,
                 pos.getZ() + 0.5);
 
-        // Get player's eye position
         Vec3 eyePos = mc.thePlayer.getPositionEyes(1.0F);
 
-        // Check if there's a clear line of sight
         MovingObjectPosition result = mc.theWorld.rayTraceBlocks(
                 eyePos,
                 blockCenter,
@@ -322,109 +272,91 @@ public class AutoMithril extends Module {
                 true,
                 false);
 
-        // If result is null or the position equals our target, we can see it
         return result == null || pos.equals(result.getBlockPos());
     }
 
-    /**
-     * Starts mining a new target
-     */
     private void startMining() {
         if (targetBlock == null) return;
 
         isMining = true;
         isAimingAtTarget = false;
-        miningCooldown = 5; // Small initial delay
+        miningCooldown = 5;
 
         if (debug.getValue()) {
             debugMessage("Starting to mine block at " + targetBlock);
         }
     }
 
-    /**
-     * Finishes mining the current target
-     */
     private void finishMining() {
         isMining = false;
         isAimingAtTarget = false;
         targetBlock = null;
         resetRotation();
 
-        // Immediately look for a new target
         findNewTarget();
     }
 
-    /**
-     * Resets mining state
-     */
     private void resetMining() {
         targetBlock = null;
         isMining = false;
         isAimingAtTarget = false;
     }
 
-    /**
-     * Mines the target block by simulating left mouse click
-     */
     private void mineBlock() {
-        if (mc.thePlayer == null || mc.theWorld == null) return;
+        if (mc.thePlayer == null || mc.theWorld == null || mc.playerController == null) return;
 
-        // Simulate left mouse click
         if (mc.objectMouseOver != null && mc.objectMouseOver.typeOfHit == MovingObjectPosition.MovingObjectType.BLOCK) {
-            // Use our mixin method instead of direct clickMouse()
-            leftClick();
+            BlockPos blockPos = mc.objectMouseOver.getBlockPos();
+            EnumFacing side = mc.objectMouseOver.sideHit;
 
-            // Optional: Add random mouse movement for more human-like behavior
-            if (random.nextInt(5) == 0) {
-                float jitterAmount = 0.3f;
-                mc.thePlayer.rotationYaw += (random.nextFloat() - 0.5f) * jitterAmount;
-                mc.thePlayer.rotationPitch += (random.nextFloat() - 0.5f) * jitterAmount;
+            try {
+                // Reset click delay
+                java.lang.reflect.Field leftClickCounterField = Minecraft.class.getDeclaredField("leftClickCounter");
+                leftClickCounterField.setAccessible(true);
+                leftClickCounterField.set(mc, 0);
+
+                // Try to start block breaking if not already breaking
+                if (!isMiningBlock(blockPos)) {
+                    mc.playerController.clickBlock(blockPos, side);
+                }
+
+                // Apply multiple damage ticks to speed up mining
+                for (int i = 0; i < 5; i++) {
+                    mc.playerController.onPlayerDamageBlock(blockPos, side);
+                }
+
+                // Swing arm
+                mc.thePlayer.swingItem();
+
+                if (debug.getValue()) {
+                    debugMessage("Mining with enhanced controller damage");
+                }
+            } catch (Exception e) {
+                if (debug.getValue()) {
+                    debugMessage("Controller damage method failed: " + e.getMessage());
+                }
             }
         }
     }
 
-    /**
-     * Simulates a left mouse click using the mixin
-     */
-    private void leftClick() {
+    private boolean isMiningBlock(BlockPos pos) {
         try {
-            // Получаем метод clickMouse из класса Minecraft
-            java.lang.reflect.Method clickMouseMethod = Minecraft.class.getDeclaredMethod("clickMouse");
-        
-            // Делаем метод доступным, так как он приватный
-            clickMouseMethod.setAccessible(true);
-        
-            // Вызываем метод clickMouse у экземпляра Minecraft
-            clickMouseMethod.invoke(mc);
-        
-            // Имитируем анимацию руки игрока
-            mc.thePlayer.swingItem();
-        
-            if (debug.getValue()) {
-                debugMessage("Left click performed using reflection");
-            }
+            java.lang.reflect.Field currentBlockField = net.minecraft.client.multiplayer.PlayerControllerMP.class.getDeclaredField("currentBlock");
+            currentBlockField.setAccessible(true);
+            BlockPos currentBlock = (BlockPos) currentBlockField.get(mc.playerController);
+            return pos.equals(currentBlock);
         } catch (Exception e) {
-            if (debug.getValue()) {
-                debugMessage("Failed to perform left click using reflection: " + e.getMessage());
-            }
-            e.printStackTrace();
+            return false;
         }
     }
-    /**
-     * Looks at a block with smooth rotation
-     */
-    /**
-     * Looks at a block with smooth rotation
-     */
+
     private void lookAtBlock(BlockPos pos) {
         if (pos == null) return;
 
-        // Get the center of the block with a slight random offset
-        double targetX = pos.getX() + 0.5 + (random.nextDouble() - 0.5) * 0.2;
-        double targetY = pos.getY() + 0.5 + (random.nextDouble() - 0.5) * 0.2;
-        double targetZ = pos.getZ() + 0.5 + (random.nextDouble() - 0.5) * 0.2;
+        double targetX = pos.getX() + 0.5;
+        double targetY = pos.getY() + 0.5;
+        double targetZ = pos.getZ() + 0.5;
 
-        // Calculate angle to target position
         double deltaX = targetX - mc.thePlayer.posX;
         double deltaY = targetY - (mc.thePlayer.posY + mc.thePlayer.getEyeHeight());
         double deltaZ = targetZ - mc.thePlayer.posZ;
@@ -434,26 +366,19 @@ public class AutoMithril extends Module {
         float yaw = (float) Math.toDegrees(Math.atan2(deltaZ, deltaX)) - 90.0F;
         float pitch = (float) -Math.toDegrees(Math.atan2(deltaY, horizontalDistance));
 
-        // Normalize angles
         yaw = MathHelper.wrapAngleTo180_float(yaw);
         pitch = MathHelper.clamp_float(pitch, -90.0F, 90.0F);
 
-        // Start smooth rotation
-        startRotation(yaw, pitch, 80 + random.nextInt(40)); // 80-120ms rotation
+        startRotation(yaw, pitch, 80 + random.nextInt(40));
     }
 
-    /**
-     * Directly rotates to look at block without smoothing
-     */
     private void directLookAtBlock(BlockPos pos) {
         if (pos == null) return;
 
-        // Get the center of the block with a slight random offset
-        double targetX = pos.getX() + 0.5 + (random.nextDouble() - 0.5) * 0.1;
-        double targetY = pos.getY() + 0.5 + (random.nextDouble() - 0.5) * 0.1;
-        double targetZ = pos.getZ() + 0.5 + (random.nextDouble() - 0.5) * 0.1;
+        double targetX = pos.getX() + 0.5;
+        double targetY = pos.getY() + 0.5;
+        double targetZ = pos.getZ() + 0.5;
 
-        // Calculate angle to target position
         double deltaX = targetX - mc.thePlayer.posX;
         double deltaY = targetY - (mc.thePlayer.posY + mc.thePlayer.getEyeHeight());
         double deltaZ = targetZ - mc.thePlayer.posZ;
@@ -463,99 +388,73 @@ public class AutoMithril extends Module {
         float yaw = (float) Math.toDegrees(Math.atan2(deltaZ, deltaX)) - 90.0F;
         float pitch = (float) -Math.toDegrees(Math.atan2(deltaY, horizontalDistance));
 
-        // Normalize angles
         yaw = MathHelper.wrapAngleTo180_float(yaw);
         pitch = MathHelper.clamp_float(pitch, -90.0F, 90.0F);
 
-        // Set rotation directly
         mc.thePlayer.rotationYaw = yaw;
         mc.thePlayer.rotationPitch = pitch;
 
-        // Instantly mark as aiming at target since we're using direct rotation
         isAimingAtTarget = true;
     }
 
-    /**
-     * Starts a smooth rotation to the target angles
-     */
     private void startRotation(float targetYaw, float targetPitch, long duration) {
         this.targetYaw = targetYaw;
         this.targetPitch = targetPitch;
         this.isRotating = true;
-        this.isAimingAtTarget = false; // Reset aiming flag while rotation is in progress
+        this.isAimingAtTarget = false;
         this.rotationStartTime = System.currentTimeMillis();
         this.rotationDuration = duration;
         this.startYaw = mc.thePlayer.rotationYaw;
         this.startPitch = mc.thePlayer.rotationPitch;
     }
 
-    /**
-     * Updates the player's rotation during a smooth rotation
-     */
     private void updateRotation() {
         long currentTime = System.currentTimeMillis();
         long elapsedTime = currentTime - rotationStartTime;
 
-        // Check if we're close enough to the target angles
         float yawDiff = MathHelper.wrapAngleTo180_float(targetYaw - mc.thePlayer.rotationYaw);
         float pitchDiff = targetPitch - mc.thePlayer.rotationPitch;
 
-        // If we're close enough to target, finish rotation
         if (Math.abs(yawDiff) < 0.3F && Math.abs(pitchDiff) < 0.3F) {
             mc.thePlayer.rotationYaw = targetYaw;
             mc.thePlayer.rotationPitch = targetPitch;
             isRotating = false;
-            isAimingAtTarget = true; // Set aiming flag once we've completed rotation
+            isAimingAtTarget = true;
             return;
         }
 
-        // Check if rotation duration has elapsed
         if (elapsedTime >= rotationDuration) {
-            // Rotation complete
             mc.thePlayer.rotationYaw = targetYaw;
             mc.thePlayer.rotationPitch = targetPitch;
             isRotating = false;
-            isAimingAtTarget = true; // Set aiming flag once we've completed rotation
+            isAimingAtTarget = true;
             return;
         }
 
-        // Calculate progress (0.0 to 1.0)
         float progress = (float) elapsedTime / rotationDuration;
 
-        // Simple easing function that doesn't overshoot
         progress = easeInOutQuad(progress);
 
-        // Interpolate between start and target rotations
         yawDiff = MathHelper.wrapAngleTo180_float(targetYaw - startYaw);
         pitchDiff = targetPitch - startPitch;
 
         mc.thePlayer.rotationYaw = startYaw + yawDiff * progress;
         mc.thePlayer.rotationPitch = startPitch + pitchDiff * progress;
 
-        // If we're more than 90% done with the rotation, consider it close enough to start mining
         if (progress > 0.9) {
             isAimingAtTarget = true;
         }
     }
 
-    /**
-     * Resets rotation to stop any ongoing rotation
-     */
     private void resetRotation() {
         isRotating = false;
         isAimingAtTarget = false;
     }
 
-    /**
-     * Easing function for smooth movement
-     */
     private float easeInOutQuad(float t) {
         return t < 0.5f ? 2 * t * t : 1 - (float)Math.pow(-2 * t + 2, 2) / 2;
     }
 
-    /**
-     * Debug message if debug mode is enabled
-     */
     private void debugMessage(String message) {
         if (debug.getValue() && mc.thePlayer != null) {
             mc.thePlayer.addChatMessage(
@@ -563,41 +462,26 @@ public class AutoMithril extends Module {
         }
     }
 
-    /**
-     * Render event to visualize target blocks
-     */
     @SubscribeEvent
     public void onRenderWorldLast(RenderWorldLastEvent event) {
         if (!this.isEnabled() || mc.thePlayer == null || mc.theWorld == null) return;
 
-        // Render current target block
         if (targetBlock != null) {
             renderBlockOutline(targetBlock, Color.GREEN, event.partialTicks);
         }
 
-        // Render bedrock blocks being tracked
         for (BlockPos pos : bedrockBlocks.keySet()) {
             renderBlockOutline(pos, Color.RED, event.partialTicks);
         }
 
-        // Render potential blocks
         for (BlockPos pos : potentialBlocks) {
             renderBlockOutline(pos, Color.BLUE, event.partialTicks);
         }
     }
 
-    /**
-     * Renders an outline around a block
-     */
     private void renderBlockOutline(BlockPos pos, Color color, float partialTicks) {
-        // This is a placeholder for rendering block outlines
-        // You would implement this with your rendering system
-        // For example, using RenderGlobal.drawSelectionBoundingBox or custom GL rendering
     }
 
-    /**
-     * Gets the name of a block for display
-     */
     private String getBlockName(BlockPos pos) {
         if (mc.theWorld == null) return "Unknown";
 
