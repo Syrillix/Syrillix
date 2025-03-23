@@ -387,33 +387,29 @@ public class AutoMithril extends Module {
      * Simulates a left mouse click using the mixin
      */
     private void leftClick() {
-        // This will be implemented via mixin
-        int leftClickCounter = 0;
         try {
-            // Try to access leftClickCounter via reflection if mixin isn't available
-            java.lang.reflect.Field field = Minecraft.class.getDeclaredField("leftClickCounter");
-            field.setAccessible(true);
-            leftClickCounter = field.getInt(mc);
-            field.set(mc, 0); // Reset counter to allow clicking
+            // Получаем метод clickMouse из класса Minecraft
+            java.lang.reflect.Method clickMouseMethod = Minecraft.class.getDeclaredMethod("clickMouse");
+        
+            // Делаем метод доступным, так как он приватный
+            clickMouseMethod.setAccessible(true);
+        
+            // Вызываем метод clickMouse у экземпляра Minecraft
+            clickMouseMethod.invoke(mc);
+        
+            // Имитируем анимацию руки игрока
+            mc.thePlayer.swingItem();
+        
+            if (debug.getValue()) {
+                debugMessage("Left click performed using reflection");
+            }
         } catch (Exception e) {
             if (debug.getValue()) {
-                debugMessage("Failed to access leftClickCounter: " + e.getMessage());
+                debugMessage("Failed to perform left click using reflection: " + e.getMessage());
             }
-        }
-
-        // Send left click event
-        mc.thePlayer.swingItem();
-
-        if (mc.objectMouseOver != null && mc.objectMouseOver.typeOfHit == MovingObjectPosition.MovingObjectType.BLOCK) {
-            BlockPos blockPos = mc.objectMouseOver.getBlockPos();
-            EnumFacing side = mc.objectMouseOver.sideHit;
-
-            if (mc.theWorld.getBlockState(blockPos).getBlock().getMaterial() != net.minecraft.block.material.Material.air) {
-                mc.playerController.clickBlock(blockPos, side);
-            }
+            e.printStackTrace();
         }
     }
-
     /**
      * Looks at a block with smooth rotation
      */
