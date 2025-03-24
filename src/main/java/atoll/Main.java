@@ -15,9 +15,6 @@ import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.InputEvent.KeyInputEvent;
 import net.minecraftforge.fml.common.gameevent.TickEvent;
 import org.lwjgl.input.Keyboard;
-import org.spongepowered.asm.launch.MixinBootstrap;
-import org.spongepowered.asm.mixin.MixinEnvironment;
-import org.spongepowered.asm.mixin.Mixins;
 
 @Mod(modid = Main.MODID, name = Main.NAME, version = Main.VERSION, clientSideOnly = true)
 public class Main {
@@ -34,9 +31,6 @@ public class Main {
     @EventHandler
     public void preInit(FMLPreInitializationEvent event) {
         instance = this;
-        MixinBootstrap.init();
-        Mixins.addConfiguration("mixins.atoll.json");
-        MixinEnvironment.getCurrentEnvironment().setObfuscationContext("searge");
     }
 
     @EventHandler

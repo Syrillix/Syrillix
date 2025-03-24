@@ -29,9 +29,6 @@ minecraft {
     // For ForgeGradle 2.1, use this format for run arguments
     makeObfSourceJar = false
 
-    // Adding run arguments for Mixin
-    clientRunArgs += "--tweakClass org.spongepowered.asm.launch.MixinTweaker"
-    clientRunArgs += "--mixin mixins.atoll.json"
 }
 
 repositories {
@@ -46,15 +43,11 @@ configurations {
 }
 
 dependencies {
-    compile 'org.spongepowered:mixin:0.7.11-SNAPSHOT'
-    annotationProcessor 'org.spongepowered:mixin:0.7.11-SNAPSHOT'
 }
 
 jar {
     manifest {
         attributes(
-                'MixinConfigs': 'mixins.atoll.json',
-                'TweakClass': 'org.spongepowered.asm.launch.MixinTweaker',
                 'FMLCorePluginContainsFMLMod': 'true',
                 'ForceLoadAsMod': 'true'
         )
