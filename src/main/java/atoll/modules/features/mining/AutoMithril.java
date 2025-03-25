@@ -203,40 +203,67 @@ public class AutoMithril extends Module {
         }
     }
 
-    /** Поиск нового целевого блока */
     private void findNewTarget() {
         if (mc.theWorld == null) return;
 
         // Сначала проверяем потенциальные блоки
         List<BlockPos> toRemove = new ArrayList<>();
+        BlockPos bestMithrilBlock = null;
 
-        for (BlockPos pos : potentialBlocks) {
-            if (isTargetBlock(pos) && isInRange(pos) && canSeeBlock(pos)) {
-                targetBlock = pos;
-                toRemove.add(pos);
-                findNextTarget();
-                startMining();
-                break;
-            } else {
-                toRemove.add(pos);
+        // Первый проход - ищем титаний в потенциальных блоках
+        if (miningTitanium.getValue()) {
+            for (BlockPos pos : potentialBlocks) {
+                if (isTitaniumBlock(pos) && isInRange(pos) && canSeeBlock(pos)) {
+                    targetBlock = pos;
+                    toRemove.add(pos);
+                    findNextTarget();
+                    startMining();
+                    potentialBlocks.removeAll(toRemove);
+                    return;
+                } else if (!isTargetBlock(pos)) {
+                    toRemove.add(pos);
+                }
             }
         }
 
-        // Удаляем обработанные блоки после итерации
+        // Второй проход - ищем мифрил в потенциальных блоках
+        if (miningMithril.getValue()) {
+            for (BlockPos pos : potentialBlocks) {
+                if (!toRemove.contains(pos) && isMithrilBlock(pos) && isInRange(pos) && canSeeBlock(pos)) {
+                    bestMithrilBlock = pos;
+                    toRemove.add(pos);
+                    break;
+                } else if (!isTargetBlock(pos)) {
+                    toRemove.add(pos);
+                }
+            }
+        }
+
+        // Удаляем обработанные блоки
         potentialBlocks.removeAll(toRemove);
 
-        // Если ничего нет — сканируем область
-        if (targetBlock == null) {
-            int rangeInt = (int) Math.ceil(range.getValue());
-            BlockPos playerPos = mc.thePlayer.getPosition();
+        // Если нашли мифрил в потенциальных блоках, используем его
+        if (bestMithrilBlock != null) {
+            targetBlock = bestMithrilBlock;
+            findNextTarget();
+            startMining();
+            return;
+        }
 
+        // Если ничего нет — сканируем область
+        int rangeInt = (int) Math.ceil(range.getValue());
+        BlockPos playerPos = mc.thePlayer.getPosition();
+        BlockPos bestMithrilInScan = null;
+
+        // Сначала ищем титаний в области
+        if (miningTitanium.getValue()) {
             for (int x = -rangeInt; x <= rangeInt; x++) {
                 for (int y = -rangeInt; y <= rangeInt; y++) {
                     for (int z = -rangeInt; z <= rangeInt; z++) {
                         BlockPos pos = playerPos.add(x, y, z);
                         if (bedrockBlocks.containsKey(pos)) continue;
 
-                        if (isTargetBlock(pos) && isInRange(pos) && canSeeBlock(pos)) {
+                        if (isTitaniumBlock(pos) && isInRange(pos) && canSeeBlock(pos)) {
                             targetBlock = pos;
                             findNextTarget();
                             startMining();
@@ -246,6 +273,61 @@ public class AutoMithril extends Module {
                 }
             }
         }
+
+        // Затем ищем мифрил в области
+        if (miningMithril.getValue()) {
+            for (int x = -rangeInt; x <= rangeInt; x++) {
+                for (int y = -rangeInt; y <= rangeInt; y++) {
+                    for (int z = -rangeInt; z <= rangeInt; z++) {
+                        BlockPos pos = playerPos.add(x, y, z);
+                        if (bedrockBlocks.containsKey(pos)) continue;
+
+                        if (isMithrilBlock(pos) && isInRange(pos) && canSeeBlock(pos)) {
+                            bestMithrilInScan = pos;
+                            break;
+                        }
+                    }
+                    if (bestMithrilInScan != null) break;
+                }
+                if (bestMithrilInScan != null) break;
+            }
+        }
+
+        // Если нашли мифрил в сканировании, используем его
+        if (bestMithrilInScan != null) {
+            targetBlock = bestMithrilInScan;
+            findNextTarget();
+            startMining();
+        }
+    }
+
+    /** Проверка, является ли блок титанием */
+    private boolean isTitaniumBlock(BlockPos pos) {
+        if (mc.theWorld == null) return false;
+
+        IBlockState state = mc.theWorld.getBlockState(pos);
+        Block block = state.getBlock();
+        int metadata = block.getMetaFromState(state);
+
+        if (block == Blocks.stone && metadata == 4) return true; // Полированный диорит
+
+        return false;
+    }
+
+    /** Проверка, является ли блок мифрилом */
+    private boolean isMithrilBlock(BlockPos pos) {
+        if (mc.theWorld == null) return false;
+
+        IBlockState state = mc.theWorld.getBlockState(pos);
+        Block block = state.getBlock();
+        int metadata = block.getMetaFromState(state);
+
+        // Проверка на мифрил
+        return (block == Blocks.stained_hardened_clay && metadata == 9) || // Cyan Stained Clay
+                (block == Blocks.wool && metadata == 9) || // Cyan Wool
+                (block == Blocks.wool && metadata == 3) || // Light Blue Wool
+                (block == Blocks.wool && metadata == 7) || // Gray Wool
+                (block == Blocks.prismarine && metadata == 0); // Обычный призмарин
     }
 
     /** Поиск следующего целевого блока */
@@ -271,24 +353,8 @@ public class AutoMithril extends Module {
 
     /** Проверка, является ли блок целевым (mithril или titanium) */
     private boolean isTargetBlock(BlockPos pos) {
-        if (mc.theWorld == null) return false;
-
-        IBlockState state = mc.theWorld.getBlockState(pos);
-        Block block = state.getBlock();
-        int metadata = block.getMetaFromState(state);
-
-        // Приоритет титания над мифрилом
-        if (miningTitanium.getValue() && block == Blocks.stone && metadata == 1) { // Полированный диорит
-            return true;
-        }
-
-        if (miningMithril.getValue()) {
-            return (block == Blocks.stained_hardened_clay && metadata == 9) || // Cyan Stained Clay
-                    (block == Blocks.wool && metadata == 9) || // Cyan Wool
-                    (block == Blocks.wool && metadata == 3) || // Light Blue Wool
-                    (block == Blocks.prismarine);
-        }
-
+        if (miningTitanium.getValue() && isTitaniumBlock(pos)) return true;
+        if (miningMithril.getValue() && isMithrilBlock(pos)) return true;
         return false;
     }
 

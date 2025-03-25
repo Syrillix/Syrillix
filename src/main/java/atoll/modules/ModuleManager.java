@@ -5,6 +5,7 @@ import atoll.modules.features.ender.*;
 import atoll.modules.features.garden.AimToCleanBlock;
 import atoll.modules.features.garden.CleanPlotESP;
 import atoll.modules.features.mining.AutoMithril;
+import atoll.modules.features.mining.EspMining;
 import atoll.modules.features.render.InvHud;
 import atoll.modules.features.test.*;
 import atoll.modules.features.fishing.*;
@@ -47,6 +48,7 @@ public class ModuleManager {
 
         //mining
         registerModule(new AutoMithril());
+        registerModule(new EspMining());
     }
 
     public void registerModule(Module module) {
