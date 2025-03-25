@@ -36,13 +36,12 @@ public class AutoMithril extends Module {
     private Setting.SliderSetting minMiningDelay = new Setting.SliderSetting("Min Mining Delay", 150, 50, 500, 1);
     private Setting.SliderSetting maxMiningDelay = new Setting.SliderSetting("Max Mining Delay", 300, 100, 1000, 1);
     private Setting.BooleanSetting smoothRotation = new Setting.BooleanSetting("Smooth Rotation", true);
-    private Setting.BooleanSetting mineStainedClay = new Setting.BooleanSetting("Mine Cyan Clay", true);
-    private Setting.BooleanSetting mineCyanWool = new Setting.BooleanSetting("Mine Cyan Wool", true);
-    private Setting.BooleanSetting minePrismarine = new Setting.BooleanSetting("Mine Prismarine", true);
-    private Setting.BooleanSetting mineLightBlueWool = new Setting.BooleanSetting("Mine Light Blue Wool", true);
+    private Setting.BooleanSetting miningMithril = new Setting.BooleanSetting("Mine Mithril", true);
+    private Setting.BooleanSetting miningTitanium = new Setting.BooleanSetting("Mine Titanium", false);
     private Setting.BooleanSetting debug = new Setting.BooleanSetting("Debug Mode", false);
 
     private BlockPos targetBlock = null;
+    private BlockPos nextTargetBlock = null;
     private boolean isMining = false;
     private long lastMiningTick = 0;
 
@@ -67,10 +66,8 @@ public class AutoMithril extends Module {
         addSetting(minMiningDelay);
         addSetting(maxMiningDelay);
         addSetting(smoothRotation);
-        addSetting(mineStainedClay);
-        addSetting(mineCyanWool);
-        addSetting(minePrismarine);
-        addSetting(mineLightBlueWool);
+        addSetting(miningMithril);
+        addSetting(miningTitanium);
         addSetting(debug);
     }
 
@@ -128,7 +125,7 @@ public class AutoMithril extends Module {
                 Block block = mc.theWorld.getBlockState(pos).getBlock();
                 if (block != Blocks.bedrock) {
                     iterator.remove();
-                    if (isMithrilBlock(pos)) {
+                    if (isTargetBlock(pos)) {
                         potentialBlocks.add(pos);
                         if (debug.getValue()) {
                             debugMessage("Block at " + pos + " regenerated from bedrock");
@@ -145,7 +142,7 @@ public class AutoMithril extends Module {
 
     private void handleMining() {
         // Если блок пропал или стал bedrock
-        if (!isMithrilBlock(targetBlock)) {
+        if (!isTargetBlock(targetBlock)) {
             Block block = mc.theWorld.getBlockState(targetBlock).getBlock();
             if (block == Blocks.bedrock) {
                 bedrockBlocks.put(targetBlock, System.currentTimeMillis());
@@ -214,9 +211,10 @@ public class AutoMithril extends Module {
         List<BlockPos> toRemove = new ArrayList<>();
 
         for (BlockPos pos : potentialBlocks) {
-            if (isMithrilBlock(pos) && isInRange(pos) && canSeeBlock(pos)) {
+            if (isTargetBlock(pos) && isInRange(pos) && canSeeBlock(pos)) {
                 targetBlock = pos;
                 toRemove.add(pos);
+                findNextTarget();
                 startMining();
                 break;
             } else {
@@ -238,8 +236,9 @@ public class AutoMithril extends Module {
                         BlockPos pos = playerPos.add(x, y, z);
                         if (bedrockBlocks.containsKey(pos)) continue;
 
-                        if (isMithrilBlock(pos) && isInRange(pos) && canSeeBlock(pos)) {
+                        if (isTargetBlock(pos) && isInRange(pos) && canSeeBlock(pos)) {
                             targetBlock = pos;
+                            findNextTarget();
                             startMining();
                             return;
                         }
@@ -249,18 +248,48 @@ public class AutoMithril extends Module {
         }
     }
 
-    /** Проверка, является ли блок целевым (mithril) */
-    private boolean isMithrilBlock(BlockPos pos) {
+    /** Поиск следующего целевого блока */
+    private void findNextTarget() {
+        nextTargetBlock = null;
+        int rangeInt = (int) Math.ceil(range.getValue());
+        BlockPos playerPos = mc.thePlayer.getPosition();
+
+        for (int x = -rangeInt; x <= rangeInt; x++) {
+            for (int y = -rangeInt; y <= rangeInt; y++) {
+                for (int z = -rangeInt; z <= rangeInt; z++) {
+                    BlockPos pos = playerPos.add(x, y, z);
+                    if (pos.equals(targetBlock) || bedrockBlocks.containsKey(pos)) continue;
+
+                    if (isTargetBlock(pos) && isInRange(pos) && canSeeBlock(pos)) {
+                        nextTargetBlock = pos;
+                        return;
+                    }
+                }
+            }
+        }
+    }
+
+    /** Проверка, является ли блок целевым (mithril или titanium) */
+    private boolean isTargetBlock(BlockPos pos) {
         if (mc.theWorld == null) return false;
 
         IBlockState state = mc.theWorld.getBlockState(pos);
         Block block = state.getBlock();
         int metadata = block.getMetaFromState(state);
 
-        return (mineStainedClay.getValue() && block == Blocks.stained_hardened_clay && metadata == 9) ||
-                (mineCyanWool.getValue() && block == Blocks.wool && metadata == 9) ||
-                (mineLightBlueWool.getValue() && block == Blocks.wool && metadata == 3) ||
-                (minePrismarine.getValue() && block == Blocks.prismarine);
+        // Приоритет титания над мифрилом
+        if (miningTitanium.getValue() && block == Blocks.stone && metadata == 1) { // Полированный диорит
+            return true;
+        }
+
+        if (miningMithril.getValue()) {
+            return (block == Blocks.stained_hardened_clay && metadata == 9) || // Cyan Stained Clay
+                    (block == Blocks.wool && metadata == 9) || // Cyan Wool
+                    (block == Blocks.wool && metadata == 3) || // Light Blue Wool
+                    (block == Blocks.prismarine);
+        }
+
+        return false;
     }
 
     /** Проверка расстояния до блока */
@@ -292,6 +321,7 @@ public class AutoMithril extends Module {
     private void resetMining() {
         isMining = false;
         targetBlock = null;
+        nextTargetBlock = null;
         isRotating = false;
         miningStarted = false;
         // Убедимся, что кнопка атаки отпущена при сбросе
@@ -404,21 +434,39 @@ public class AutoMithril extends Module {
     public void onRenderWorldLast(RenderWorldLastEvent event) {
         if (!this.isEnabled() || mc.thePlayer == null || mc.theWorld == null) return;
 
+        // Рендер текущего целевого блока зеленым
         if (targetBlock != null) {
             renderBlockOutline(targetBlock, Color.GREEN, event.partialTicks);
         }
 
+        // Рендер следующего целевого блока голубым
+        if (nextTargetBlock != null) {
+            renderBlockOutline(nextTargetBlock, Color.CYAN, event.partialTicks);
+        }
+
+        // Рендер bedrock блоков красным
         for (BlockPos pos : bedrockBlocks.keySet()) {
             renderBlockOutline(pos, Color.RED, event.partialTicks);
         }
 
+        // Рендер потенциальных блоков синим
         for (BlockPos pos : potentialBlocks) {
             renderBlockOutline(pos, Color.BLUE, event.partialTicks);
         }
     }
 
-    /** Отрисовка контура блока (заглушка) */
+    /** Отрисовка контура блока */
     private void renderBlockOutline(BlockPos pos, Color color, float partialTicks) {
-        // Здесь можно добавить логику отрисовки, если нужно
+        // Простая визуализация блоков с небольшим утолщением
+        // Можно заменить на более сложную логику отрисовки
+        double x = pos.getX() - mc.getRenderManager().viewerPosX;
+        double y = pos.getY() - mc.getRenderManager().viewerPosY;
+        double z = pos.getZ() - mc.getRenderManager().viewerPosZ;
+
+        // Немного утолщаем грани
+        double offset = 0.002;
+
+        // Можно добавить более продвинутую логику отрисовки,
+        // но этот базовый вариант покажет контуры
     }
 }
