@@ -1,13 +1,12 @@
 [
 {
-  "modid": "examplemod",
-  "name": "Example Mod",
-  "description": "Give a description of your mod here, it will show in the modlist menu",
-  "version": "${version}",
-  "mcversion": "${mcversion}",
+  "modid": "Syrillix",
+  "name": "Syrillix",
+  "description": "Syrillix:::3",
+  "version": "${0.01}",
+  "mcversion": "${1.8.9}",
   "url": "",
   "updateUrl": "",
-  "authorList": ["Put your name here!"],
   "credits": "",
   "logoFile": "",
   "screenshots": [],
