@@ -26,7 +26,7 @@ public class Main {
     private ClickGui clickGui;
     private ModuleManager moduleManager;
     private boolean shouldOpenGui = false;
-    
+
 
     @EventHandler
     public void preInit(FMLPreInitializationEvent event) {

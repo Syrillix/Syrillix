@@ -13,6 +13,7 @@ buildscript {
 }
 
 apply plugin: 'net.minecraftforge.gradle.forge'
+apply plugin: 'com.github.johnrengelman.shadow'
 
 version = "1.0"
 group = "atoll"
@@ -80,3 +81,12 @@ reobf {
         classpath = sourceSets.main.compileClasspath
     }
 }
+
+shadowJar {
+    classifier = '' // Заменяет обычный jar
+    configurations = [project.configurations.compile]
+    relocate 'atoll', 'atollscript.repack' // Опционально: релокация пакетов
+}
+
+// Связываем shadowJar с build
+build.dependsOn shadowJar
