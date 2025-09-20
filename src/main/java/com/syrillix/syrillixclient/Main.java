@@ -1,19 +1,103 @@
 package com.syrillix.syrillixclient;
 
-import net.minecraftforge.fml.common.Mod;
-import net.minecraftforge.fml.common.event.FMLInitializationEvent;
+import com.syrillix.syrillixclient.modules.ModuleManager;
+import com.syrillix.syrillixclient.gui.ClickGui;
+import com.syrillix.syrillixclient.gui.Category;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiScreen;
 import net.minecraftforge.common.MinecraftForge;
-import com.syrillix.syrillixclient.gui.ClickGUI;
+import net.minecraftforge.fml.client.FMLClientHandler;
+import net.minecraftforge.fml.common.Mod;
+import net.minecraftforge.fml.common.Mod.EventHandler;
+import net.minecraftforge.fml.common.event.FMLInitializationEvent;
+import net.minecraftforge.fml.common.event.FMLPreInitializationEvent;
+import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
+import net.minecraftforge.fml.common.gameevent.InputEvent.KeyInputEvent;
+import net.minecraftforge.fml.common.gameevent.TickEvent;
+import org.lwjgl.input.Keyboard;
 
-@Mod(modid = SyrillixMod.MODID, name = SyrillixMod.MODNAME, version = SyrillixMod.VERSION)
-public class SyrillixMod {
-    public static final String MODID = "syrillix";
-    public static final String MODNAME = "Syrillix Client";
+@Mod(modid = Main.MODID, name = Main.NAME, version = Main.VERSION, clientSideOnly = true)
+public class Main {
+    public static final String MODID = "atollscript";
+    public static final String NAME = "Atoll script";
     public static final String VERSION = "1.0";
 
-    @Mod.EventHandler
+    public static Main instance;
+    private ClickGui clickGui;
+    private ModuleManager moduleManager;
+    private boolean shouldOpenGui = false;
+
+
+    @EventHandler
+    public void preInit(FMLPreInitializationEvent event) {
+        instance = this;
+    }
+
+    @EventHandler
     public void init(FMLInitializationEvent event) {
-        System.out.println("Syrillix Client init");
-        MinecraftForge.EVENT_BUS.register(new ClickGUI());
+        // Регистрация обработчика событий
+        MinecraftForge.EVENT_BUS.register(this);
+
+        // Инициализация ClickGui
+        clickGui = new ClickGui();
+
+        // Инициализация категорий
+        Category.initializeCategories();
+
+        // Добавление категорий в ClickGui
+        for (Category category : Category.getCategories()) {
+            clickGui.addCategory(category);
+        }
+
+        // Инициализация менеджера модулей
+        moduleManager = new ModuleManager();
+        moduleManager.initializeModules();
+    }
+
+    @SubscribeEvent
+    public void onClientTick(TickEvent.ClientTickEvent event) {
+        if (event.phase == TickEvent.Phase.END && shouldOpenGui) {
+            shouldOpenGui = false;
+            // In 1.8.9, we need to use FMLClientHandler or direct field access
+            Minecraft mc = FMLClientHandler.instance().getClient();
+            mc.displayGuiScreen(clickGui);
+        }
+    }
+
+    @SubscribeEvent
+    public void onKeyInput(KeyInputEvent event) {
+        // Only process key presses, not releases
+        if (Keyboard.getEventKeyState()) {
+            int keyCode = Keyboard.getEventKey();
+
+            // Check for GUI toggle key
+            if (keyCode == Keyboard.KEY_RSHIFT) {
+                System.out.println("Right shift pressed, opening GUI");
+                shouldOpenGui = true;
+            }
+
+            // Check module keybinds
+            if (moduleManager != null) {
+                moduleManager.getModules().forEach(module -> {
+                    if (module.getKeyBind() != Keyboard.KEY_NONE && keyCode == module.getKeyBind()) {
+                        module.toggle();
+                        System.out.println("Toggled module: " + module.getName() + " - Enabled: " + module.isEnabled());
+                    }
+                });
+            }
+        }
+    }
+
+
+    public ClickGui getClickGui() {
+        return clickGui;
+    }
+
+    public ModuleManager getModuleManager() {
+        return moduleManager;
+    }
+
+    public static Main getInstance() {
+        return instance;
     }
 }

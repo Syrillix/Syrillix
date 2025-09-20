@@ -1,4 +1,4 @@
-package com.syrillix.syrillixclient.gui;
+package com.syrillix.syrillixclient.modules.features.render;
 
 public class Hotbar {
 }
